@@ -25,7 +25,7 @@
 8. [Feasibility Assessment](#feasibility-assessment)
    - [What Is Technically Sound](#what-is-technically-sound)
    - [What Is Technically Novel and Hard](#what-is-technically-novel-and-hard)
-   - [Running Liquid on Mobile: Tauri Mobile vs Flutter](#running-liquid-on-mobile-tauri-mobile-vs-flutter)
+   - [Why Flutter as the Universal UI Layer](#why-flutter-as-the-universal-ui-layer)
    - [Risk Register](#risk-register)
    - [Competitive Landscape](#competitive-landscape)
    - [Recommended Phasing](#recommended-phasing)
@@ -37,7 +37,7 @@
 
 Liquid is a universal application platform — part UI framework, part SDK, part operating environment — that lets developers build rich, composable applications and lets users run, arrange, and govern those applications uniformly across Linux, Windows, macOS, iOS, and Android.
 
-Where today's cross-platform stacks force trade-offs between native feel and developer ergonomics, Liquid targets both: a Rust core for performance and safety, a TypeScript surface for ecosystem reach, and a component model that is as composable as Notion blocks but without Notion's walled garden.
+Where today's cross-platform stacks force trade-offs between native feel and developer ergonomics, Liquid targets both: a Rust core for performance and safety, a Flutter/Dart surface for a single consistent UI across every platform, and a component model that is as composable as Notion blocks but without Notion's walled garden.
 
 Agents are not an afterthought. Liquid is designed from the ground up for environments where AI agents and human users operate at equal standing — sharing the same identity model, the same permission system, and the same VCS audit trail. Agents interact through a structured CLI rather than a graphical UI, making them efficient at scale without requiring any rendering infrastructure.
 
@@ -307,7 +307,7 @@ The Liquid SDK provides:
 - **Agent CLI surface** — declare which app operations are accessible via the Liquid agent CLI; the runtime generates the CLI commands from the manifest automatically; no separate integration effort
 - **Extension API** — hook into other apps/components if permitted
 
-Target languages: TypeScript (primary), with Rust bindings for performance-critical components.
+Target languages: Dart (primary, via Flutter), with Rust bindings via FFI for performance-critical and platform-native components.
 
 ---
 
@@ -316,14 +316,14 @@ Target languages: TypeScript (primary), with Rust bindings for performance-criti
 | Layer | Technology | Rationale |
 |---|---|---|
 | Core runtime | Rust | Memory safety, performance, cross-platform compilation |
-| Desktop UI shell | Tauri 2.x (WebView) | Proven Rust + TypeScript cross-platform desktop; production-stable |
-| App/component logic | TypeScript | Ecosystem size, developer familiarity |
+| UI shell — all platforms | Flutter (Dart) | Single codebase for Linux, Windows, macOS, iOS, Android; Impeller GPU renderer; no WebView |
+| App/component logic | Dart | Consistent with Flutter; strong typing; good LLM tooling support |
+| Rust ↔ Dart bridge | Flutter FFI + `flutter_rust_bridge` | Zero-copy calls between Dart UI layer and Rust core |
 | VCS storage | Jujutsu | Operation log, cleaner conflict model vs. Git, large-repo performance |
-| Mobile shell | Tauri Mobile or Flutter (decision in phase 2) | See [Running Liquid on Mobile](#running-liquid-on-mobile-tauri-mobile-vs-flutter) |
 | Read cache | Redis-class distributed cache | Sub-millisecond warm reads; content-addressed = exact invalidation |
 | Permission index | Materialized key-value store | Single-lookup permission checks at 20 000+ concurrent principals |
 | Event bus | Kafka-class message bus | Fan-out for multi-region replication and data binding at scale |
-| Agent interface | Liquid Agent CLI (generated from app manifest) | Structured, scriptable, zero rendering overhead |
+| Agent interface | Liquid Agent CLI (generated from app manifest, implemented in Rust) | Structured, scriptable, zero rendering overhead |
 | Package registry | Self-hosted, open protocol | No vendor lock-in |
 
 ---
@@ -343,11 +343,11 @@ Liquid is designed to run without any external subscription:
 
 ### What Is Technically Sound
 
-**Cross-platform desktop shell (Linux, Windows, macOS)**
-Tauri 2.x is production-stable. A Rust backend + TypeScript frontend cross-platform desktop application is a well-proven pattern in 2026.
+**Cross-platform UI shell (Linux, Windows, macOS, iOS, Android)**
+Flutter 3.x is in its Production Era (as of late 2025). The Impeller GPU renderer is fully stable on all five target platforms, delivering consistent 60/120 fps without WebView jank or shader compilation stutter. Flutter is the only single-codebase framework that covers all five of Liquid's target platforms with a non-WebView rendering pipeline. AppFlowy — a direct Notion alternative — ships a Notion-quality editor and sidebar in Flutter, proving the visual target is reachable.
 
 **Grid layout engine**
-Responsive grid layouts with spanning and drag-and-drop are solved problems in web rendering. The static-grid-with-spanning model Liquid uses is simpler than fully freeform canvas layouts and straightforward to implement correctly.
+Flutter's widget system supports arbitrary custom layouts. A static grid with cell spanning and drag-and-drop reordering is straightforward to implement in Flutter using `CustomMultiChildLayout` or a purpose-built grid widget. This is less work than the equivalent in web CSS because Flutter has no browser compatibility surface to navigate.
 
 **Component data binding**
 Typed publish/subscribe between components is a well-understood pattern (RxJS, spreadsheet cell references, Unix pipes). Implementing it as a first-class SDK primitive is architecturally novel for a UI framework but not technically risky.
@@ -361,8 +361,11 @@ Using a VCS as a content store is unconventional but sound. Jujutsu's operation 
 **Enterprise-scale permission system**
 A materialized permission index (RBAC evaluated once on policy change, results stored for O(1) lookup) is the standard approach for fine-grained permissions at tens of thousands of concurrent principals. This is operationally non-trivial but architecturally well-understood.
 
+**Dart as SDK language**
+Dart is strongly typed, compiles ahead-of-time, and has well-established conventions for widget development. LLMs (Claude, Gemini, GPT-4) handle idiomatic Dart and Flutter patterns reliably in 2026. Flutter 3.41 ships a Dart MCP server that gives AI coding tools deep project context, directly improving LLM-assisted development. The ecosystem is smaller than TypeScript but mature enough: pub.dev hosts 50 000+ packages, and Flutter has first-class support in every major IDE.
+
 **Agent-as-principal with CLI interface**
-Treating AI agents as first-class RBAC principals with a generated CLI surface is straightforward to implement once the RBAC model and app manifest format exist. The CLI generation pattern (manifest → commands) is the same approach used by tools like the AWS CLI and Kubernetes kubectl.
+Treating AI agents as first-class RBAC principals with a generated CLI surface is straightforward to implement once the RBAC model and app manifest format exist. The CLI generation pattern (manifest → commands) is the same approach used by tools like the AWS CLI and Kubernetes kubectl. The CLI is implemented in Rust and is independent of the Dart/Flutter layer entirely.
 
 **Extension system**
 Hook-based extension architectures are mature (VS Code's extension API is the gold standard). Replicating a restricted version of this is achievable.
@@ -373,7 +376,7 @@ Hook-based extension architectures are mature (VS Code's extension API is the go
 
 **Cross-app component protocol (MEDIUM-HIGH difficulty)**
 
-For a component built by Developer A to run correctly inside an app built by Developer B, both must conform to a shared protocol for DOM/render tree ownership, event propagation, layout negotiation, data slot types, and security sandboxing. Defining and stabilizing this protocol is a significant design effort before any app ecosystem can form. Shipping 5–10 first-party apps that exercise the protocol is the only way to validate it before opening it to third parties.
+For a component built by Developer A to run correctly inside an app built by Developer B, both must conform to a shared protocol for Flutter widget tree ownership, gesture and focus routing, layout constraints, data slot types, and security sandboxing. Flutter's widget model (everything is a widget, layout is constraint-based) is actually well-suited to this: components receive a `BoxConstraints` from the grid and lay themselves out within it, which is exactly how Flutter's native layout system works. The harder parts are gesture disambiguation between adjacent components and the security boundary — a component must not be able to read another component's state without an explicit data binding. Shipping 5–10 first-party apps that exercise the protocol is the only way to validate it before opening it to third parties.
 
 **Scalable VCS + caching layer (MEDIUM difficulty)**
 
@@ -385,46 +388,38 @@ Jujutsu's library API (jj-lib) is not yet stable. Building a production system o
 
 ---
 
-### Running Liquid on Mobile: Tauri Mobile vs Flutter
+### Why Flutter as the Universal UI Layer
 
-**The core question: how does Liquid get onto a phone at all?**
+Liquid targets five platforms: Linux, Windows, macOS, iOS, and Android. One of its explicit differentiators is mobile-native UX — not a mobile port, not a responsive web view, but a first-class mobile experience. That requirement, combined with the single-SDK goal (one component codebase runs everywhere), narrows the choice considerably.
 
-On Linux, Windows, and macOS, Tauri handles packaging. It wraps the Rust core and the TypeScript UI into a native desktop window that the OS can launch — no browser needed, no Electron-style bundled Chromium. The result is a small, fast native app.
+**Why not a web-based approach (Tauri / Electron)?**
 
-On iOS and Android, the situation is different. Apple and Google each have their own app ecosystems with strict rules: to distribute on the App Store or Play Store, the code must be packaged as a native app in a format they accept. You cannot just ship a web page or a Linux binary. This means Liquid needs a separate packaging and runtime strategy for mobile — and that is where Tauri Mobile and Flutter come in.
+Tauri and Electron both render UI inside a WebView or bundled Chromium. On desktop they work well. On mobile, Tauri wraps the UI in WKWebView (iOS) or the Android System WebView. This is exactly the architecture Notion used before their multi-year migration away from it — and it is the reason Notion's mobile app is still criticised for performance and UX feel in 2026. A WebView rendering pipeline on mobile hardware introduces jank, gesture approximation, and a ceiling that compounds over time as the app grows more complex. For Liquid's grid with live data-binding components, that ceiling would be hit early.
 
-**Option A: Tauri Mobile**
+**Why Flutter specifically?**
 
-Tauri Mobile (introduced in Tauri v2.0, stable since October 2024) extends Tauri's model to iOS and Android. The Rust core compiles to a native library; the TypeScript UI runs inside the platform's built-in WebView (WKWebView on iOS, Android System WebView on Android). One codebase, five targets.
+Flutter's Impeller renderer (fully stable on all platforms as of Flutter 3.22) draws every pixel through its own GPU pipeline — no WebView, no platform widget intermediary. The result is consistent 60/120 fps on mobile and desktop alike. Critically:
 
-*Current status (2026):* Tauri Mobile is production-ready for straightforward apps. Native APIs for biometric auth, notifications, NFC, clipboard, and deep links are available. The mobile targets reached stable API status in v2.0.0. The gap relative to the desktop version is that not all desktop plugins have been ported to mobile yet, and the Tauri team has described v2 mobile as "a solid foundation" rather than feature-complete.
+- **One codebase, five targets.** The same Dart component code runs on Linux, Windows, macOS, iOS, and Android. App developers write a component once.
+- **Notion/Claude-quality UX is proven.** AppFlowy — a direct open-source Notion alternative — ships a full block editor, sidebar, page tree, and drag-and-drop in Flutter. The visual and interaction quality bar is demonstrably reachable.
+- **Rust core is fully preserved.** The Flutter layer calls into the Rust core via FFI using `flutter_rust_bridge`, which generates type-safe Dart bindings from Rust code. VCS, permissions, caching, and the agent CLI all live in Rust. Flutter is strictly the rendering and input layer.
+- **LLM development support is solid.** Claude Code, Gemini Code Assist, Cursor, and Windsurf all support Dart/Flutter in 2026. Flutter 3.41 ships a Dart MCP server that gives AI tools deep project context. For standard Flutter patterns, LLM assistance is reliable.
+- **Desktop support is production-ready.** Flutter desktop (Linux, Windows, macOS) is in production use at scale in 2026 — the Canonical Ubuntu installer ships in Flutter, and the ecosystem of desktop-ready packages has matured significantly.
 
-*Limitations that matter for Liquid:*
+**The trade-off: Dart instead of TypeScript**
 
-- **WebView fragmentation** — on iOS, Apple mandates WKWebView for all third-party apps; no alternative engine is permitted. WKWebView's CSS and JavaScript behavior is tied to the iOS version. On Android, the WebView is the system Chromium and varies by device and Android version.
-- **Native UX feel** — swipe gestures, momentum scrolling, haptic feedback, and platform-specific animations that users expect on iOS and Android are not automatic inside a WebView. Reproducing them requires significant CSS and JavaScript work, and the results can still fall short of a fully native feel.
-- **Performance ceiling** — mobile hardware is meaningfully weaker than desktop. A WebView rendering pipeline adds overhead. A grid with multiple live data-binding components needs careful optimization to stay smooth at 60 fps.
+Flutter requires Dart for UI code. Dart is not TypeScript: the hiring pool is smaller, the ecosystem (pub.dev, ~50 000 packages) is smaller than npm, and developers unfamiliar with Flutter face a learning curve. This is the primary cost of the Flutter decision.
 
-**Option B: Flutter**
+It is the right trade-off for Liquid because the single-SDK requirement means the alternative is not "TypeScript and the web ecosystem" — it is "TypeScript on desktop plus Dart on mobile" (two codebases, developers implement components twice). Given that choice, committing fully to Dart and getting a single consistent stack is clearly preferable.
 
-Flutter (v3.38, November 2025 — now in its "Production Era") does not use a WebView at all. It renders everything through its own GPU-accelerated pipeline called Impeller, which is fully stable on iOS and Android as of Flutter 3.22 and delivers consistent 60/120 fps across devices without shader compilation jank. Flutter compiles to native ARM binaries and communicates directly with platform APIs.
+**The Rust ↔ Dart boundary**
 
-*Trade-off:* Flutter requires Dart as a fourth language (alongside Rust, TypeScript, and any Swift/Kotlin for native plugins). It diverges from Liquid's core stack. However, with a clean Rust core library, the Flutter shell can call into the same Rust business logic via FFI — it only replaces the rendering and packaging layer.
+All business logic, storage, permissions, and agent CLI stay in Rust. Flutter calls into Rust via `flutter_rust_bridge`, which:
+- Generates type-safe async Dart bindings from annotated Rust functions
+- Handles threading automatically (Rust runs on a separate thread pool; Dart receives results via `Future`/`Stream`)
+- Supports zero-copy transfer of large byte buffers
 
-**Comparison**
-
-| | Tauri Mobile | Flutter |
-|---|---|---|
-| Language overhead | None (same TS/Rust) | Dart (new language) |
-| Rendering | Platform WebView | Custom GPU pipeline (Impeller) |
-| Native UX feel | Requires CSS/JS effort | Native by default |
-| Mobile performance | Good, WebView-limited | Excellent, no WebView |
-| Production status (2026) | Stable, feature gaps vs desktop | Production Era, fully stable |
-| Desktop support | Yes (same codebase) | Yes but less mature than mobile |
-
-**Recommendation**
-
-Treat mobile as phase 2. In phase 1, ship and validate the desktop experience, SDK, and agent CLI. Before committing to either mobile approach, run a 2–3 week spike: implement the Liquid grid layout and one data-binding component pair on a real iOS and Android device using Tauri Mobile. Measure frame rate, gesture responsiveness, and overall feel. If the result meets the quality bar, proceed with Tauri Mobile (zero stack overhead). If it does not, adopt Flutter with a shared Rust core for the business logic layer.
+This means the performance-critical path (VCS operations, cache lookups, permission checks) never touches Dart. Dart is responsible only for rendering and user input.
 
 ---
 
@@ -432,7 +427,9 @@ Treat mobile as phase 2. In phase 1, ship and validate the desktop experience, S
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Mobile UX quality bar not met with Tauri Mobile WebView | Medium | Medium | Run phase 2 spike on real devices; keep Flutter as a drop-in alternative for the rendering layer only |
+| Dart/Flutter contributor pool smaller than TypeScript | Medium | Medium | Strong onboarding docs; LLM tooling (Claude Code + Dart MCP server) lowers the ramp; AppFlowy ecosystem provides reusable components |
+| Flutter desktop ecosystem gaps for niche platform integrations | Low | Low | Platform channels allow thin Swift/Kotlin/C++ bridges for any missing API; this is the standard Flutter escape hatch |
+| `flutter_rust_bridge` API changes break the Dart ↔ Rust boundary | Low | Medium | Pin the bridge version; the boundary is narrow and well-defined; migrations are tractable |
 | Cross-app component protocol fails to attract third-party developers | Medium | High | Ship 5–10 first-party apps to prove the protocol before opening it |
 | Jujutsu API instability causes rework | Medium | Medium | Pin jj-lib version; track upstream; budget migration time each release |
 | Cache/permission index under-designed in phase 1, requires rewrite | Medium | High | Define clean storage and permission interfaces in phase 1; cache layer can be stubbed but the interface must be final |
@@ -448,13 +445,13 @@ Treat mobile as phase 2. In phase 1, ship and validate the desktop experience, S
 
 | Project | Overlap | Key difference |
 |---|---|---|
-| **Tauri** | Cross-platform Rust + TS desktop | Tauri is a shell; Liquid is a full application platform with component protocol, VCS, and user management |
-| **Flutter** | Cross-platform including mobile | Dart ecosystem, no VCS integration, no component protocol |
-| **Electron** | Cross-platform desktop | Heavy, Chromium bundled, no VCS, no component protocol |
-| **Notion** | UX inspiration, block model, page tree | Closed, SaaS, no SDK, no VCS, no developer framework |
+| **AppFlowy** | Closest: open-source Notion alternative, Rust + Flutter | No component SDK, no cross-app data binding, no enterprise permission model, no agent layer |
+| **Tauri** | Cross-platform Rust desktop shell | WebView on mobile; Liquid uses Flutter for a consistent non-WebView renderer on all five platforms |
+| **Electron** | Cross-platform desktop | Desktop only, heavy (165 MB installer), no VCS, no component protocol |
+| **Notion** | UX inspiration, block model, page tree | Closed, SaaS, no SDK, no VCS, no developer framework; mobile performance known weak point |
 | **Obsidian** | Explorer UX, extensibility | Note-taking only, no cross-app component protocol, Git plugin not native |
 | **ClickUp** | Card/widget layout inspiration | SaaS, closed ecosystem, no component protocol |
-| **AppFlowy** | Open Notion alternative | No cross-platform mobile, no component SDK, no VCS |
+| **React Native** | Cross-platform mobile + some desktop | Notion abandoned it; JS bridge bottleneck; no VCS, no component protocol |
 
 Liquid's combination of **open SDK + cross-app data-binding components + VCS-native + agent-as-principal + enterprise scale** has no direct equivalent. The risk is not that competitors exist but that the scope is so large it is hard to reach a compelling v1.
 
@@ -464,31 +461,30 @@ Liquid's combination of **open SDK + cross-app data-binding components + VCS-nat
 
 **Phase 1 — Desktop shell + SDK foundation (12–18 months, small team)**
 
-- Liquid shell for Linux, Windows, macOS (Tauri 2.x)
+- Liquid shell for Linux, Windows, macOS — Flutter desktop (Dart + Rust core via `flutter_rust_bridge`)
 - Explorer panel with page tree (icons, subpages, drag-and-drop) and tag-based sections
 - Grid-based page layout with cell spanning and maximize
 - Component data binding (typed output/input slots, wiring UI)
-- First-party TextEditor, Spreadsheet, and Chart apps to prove the SDK and data binding
+- First-party TextEditor, Spreadsheet, and Chart apps built in Dart to prove the SDK and data binding
 - User/permission management (single-tenant), OIDC-compatible auth
-- Jujutsu-backed storage with clean storage interface abstraction; read cache and permission index are stubbed behind the interface (implementation can be in-process for phase 1, swapped for distributed in phase 2 without application changes)
-- TypeScript SDK: App manifest, Component protocol, Data binding API, VCS API, Agent CLI surface generator
-- Agent identity, authentication, and CLI — agents can read/write via `liquid` CLI through the same permission path as human users; all edits are attributed and reversible
+- Jujutsu-backed storage with clean storage interface abstraction; read cache and permission index are stubbed behind the interface (swappable in phase 2 without application changes)
+- Dart SDK: App manifest, Component protocol, Data binding API, VCS API, Agent CLI surface declaration
+- Rust Agent CLI (`liquid` binary) — agents read/write through the same permission path as human users; all edits are attributed and reversible
 
-Success criterion: a developer builds a Liquid app with data-binding components in under a day. An agent is provisioned, assigned a role, and performs versioned edits with a full audit trail — entirely via CLI.
+Success criterion: a developer builds a Liquid app with data-binding components in Dart in under a day. An agent is provisioned, assigned a role, and performs versioned edits with a full audit trail — entirely via CLI.
 
-**Phase 2 — Component protocol + multi-tenant + scale (6–12 months)**
+**Phase 2 — Mobile + component protocol + multi-tenant + scale (6–12 months)**
 
+- iOS and Android — same Flutter/Dart codebase from phase 1; Flutter's build tooling targets both with minimal delta
 - Cross-app component protocol v1 (published, stable, versioned)
 - Multi-tenant support; tenant-partitioned Jujutsu repositories
 - Extension API
 - Distributed read cache and materialized permission index deployed (replaces phase 1 stubs)
 - Self-hosted registry with signed package verification
 - Agent-to-agent data binding via CLI slot subscription
-- Mobile spike: build grid + one data-binding pair on real iOS/Android devices with Tauri Mobile; decide Tauri Mobile vs Flutter
 
-**Phase 3 — Mobile + ecosystem + HA**
+**Phase 3 — Ecosystem + HA**
 
-- iOS and Android (Tauri Mobile if spike passed quality bar; Flutter otherwise)
 - Multi-region / high-availability deployment guide
 - Community app ecosystem opened
 - Performance hardening: profiling at 10 000+ concurrent sessions, load testing, SLA documentation
@@ -501,8 +497,8 @@ Liquid addresses real, under-served problems: VCS-native content, cross-app data
 
 Performance, security, scalability, and stability are not aspirational — they are design constraints enforced from phase 1. The key architectural decisions that make the scale targets achievable are all standard, proven patterns: content-addressed caching, a materialized permission index, tenant-partitioned storage, and a stateless request path. None of them are exotic; all of them must be designed for early so they can be swapped from stubs to production implementations in phase 2 without touching application code.
 
-The mobile question is no longer a binary between "Tauri Mobile is experimental" and "rewrite in Flutter." Tauri 2.x mobile is production-stable as of 2026. The remaining question is whether WebView-based rendering meets Liquid's quality bar for a mobile-first experience — and that is answered by a focused spike in phase 2, not by assumption.
+Flutter as the universal UI layer resolves the mobile question cleanly: one Dart codebase targets all five platforms through a consistent GPU-rendered pipeline. There is no WebView ceiling, no platform-specific rendering divergence, and no split SDK. Mobile arrives in phase 2 as a build target, not a separate workstream. The Rust ↔ Dart boundary via `flutter_rust_bridge` keeps all business logic, storage, and security in Rust, where it belongs.
 
-The primary execution risk remains **scope**. The path to success is shipping a desktop v1 that demonstrates the SDK, data binding, agent CLI, and VCS audit trail working together convincingly. That is the proof of concept that attracts contributors and validates the protocol before it is opened to the community.
+The primary execution risk remains **scope**. The path to success is shipping a desktop v1 in Flutter that demonstrates the SDK, data binding, agent CLI, and VCS audit trail working together convincingly. That is the proof of concept that attracts contributors and validates the protocol before it is opened to the community.
 
 With disciplined phasing, Liquid is feasible. Without it, it joins the long list of ambitious open-source platforms that never shipped.
