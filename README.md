@@ -1,6 +1,6 @@
 # Liquid
 
-> An open-source, cross-platform UI framework and SDK for building apps, components, and extensions — with VCS, user management, and agent-ready permissions built in from day one. Designed for enterprise scale: 10 000+ users, 10 000+ agents, millions of files, millisecond latency.
+> An open-source, cross-platform UI framework and SDK for building apps, components, and extensions — with VCS, user management, and agent-ready permissions built in from day one. Each workspace scales independently to 10 000+ users, 10 000+ agents, and millions of files with millisecond latency.
 
 ---
 
@@ -55,7 +55,7 @@ Performance, security, and scalability are non-negotiable constraints, not post-
 | Subscriptions required for core functionality | Fully self-hostable; no SaaS dependency |
 | Components are siloed inside apps, data cannot flow between them | Cross-app component data binding: any component can publish and consume typed data streams |
 | Agent access is coarse-grained or uncontrolled | Agents are first-class principals with identity, roles, and fine-grained permissions; they operate via a structured CLI, not a GUI |
-| Frameworks are not built for enterprise scale | Scalability, performance, security, and stability are core design targets from day one — not retrofits |
+| Frameworks are not built for enterprise scale | Each workspace scales independently to 10 000+ users, 10 000+ agents, and millions of files — performance, security, and stability are core design targets from day one |
 
 ---
 
@@ -65,7 +65,7 @@ These are not aspirational goals — they are hard constraints that every archit
 
 ### Performance
 
-- **Target:** operations complete in milliseconds at full scale (10 000+ concurrent users and agents, millions of files)
+- **Target:** operations complete in milliseconds at full scale — 10 000+ concurrent users and agents, millions of files, **measured per workspace**
 - **Mechanism:** the VCS layer (Jujutsu) is the durable write-ahead log and source of truth; it is never the hot read path
 - A **content-addressable read cache** (Redis-class) sits in front of the VCS. VCS objects are immutable by content hash, so cache invalidation is exact and cheap — a commit evicts only the changed hashes
 - All latency-sensitive reads (page loads, component data, permission checks) are served from the cache; the VCS is consulted only on cache miss or write
@@ -73,10 +73,12 @@ These are not aspirational goals — they are hard constraints that every archit
 
 ### Scalability
 
+**Scope: per workspace.** Liquid's scalability targets apply at the workspace level — the same unit Notion calls a workspace. A single Liquid installation hosts many independent workspaces (mapped to tenants). Each workspace scales on its own to 10 000+ human users, 10 000+ agents, and millions of files. One workspace's load never affects another. The total capacity of a Liquid installation is the sum of its workspaces and scales horizontally by adding nodes, not by redesigning the application.
+
 - **Target:** horizontal scaling with no single-node bottleneck at any layer
 - The Liquid server is stateless between requests; session state is stored in the cache layer
 - The permission system uses a **materialized permission index** — RBAC evaluation is a single key lookup, not a live graph traversal; the index is updated asynchronously on role/policy changes
-- VCS write throughput scales via partitioning by tenant; tenants are independent repositories
+- VCS write throughput scales via **partitioning by workspace (tenant)**; each workspace is an independent Jujutsu repository — one workspace's commit load has zero impact on another
 - For multi-region deployments: a change event bus (Kafka-class) fans out commits to replica nodes; reads are local, writes are primary-with-async-replication
 - Agent workloads (which can be highly parallel) use the same stateless request path as human users — no special agent infrastructure needed
 
@@ -204,12 +206,13 @@ Extensions follow the same permission model as apps and are subject to the same 
 
 ### Tenants
 
-A single Liquid user can have multiple **tenants** — isolated environments with separate app configurations, data, and permission scopes:
+A **workspace** (called a tenant internally) is an isolated environment with its own apps, pages, data, users, agents, and permission scopes — the same concept as a Notion workspace. A single Liquid user can belong to multiple workspaces:
 
-- Example: one tenant for personal use, one for a work organization
-- Switching tenants switches the full context: the explorer content, pages, and the user's effective permissions
-- Agents are assigned to tenants and inherit only that tenant's permission scope
-- In an enterprise deployment, tenants map to organizational units (teams, departments, external partners)
+- Example: one workspace for personal use, one for a work organisation
+- Switching workspaces switches the full context: the explorer content, pages, and the user's effective permissions
+- Agents are assigned to a workspace and inherit only that workspace's permission scope
+- In an enterprise deployment, workspaces map to organisational units (teams, departments, external partners)
+- Each workspace is an independent unit of scale — its VCS repository, cache partition, and permission index are isolated from every other workspace on the same installation
 
 ---
 
@@ -275,7 +278,7 @@ Agents receive roles and permission scopes through the same RBAC system as human
 - An agent can be granted read access to specific pages, components, or data fields and nothing else
 - An agent cannot exceed the permissions of the human principal who provisioned it
 - Permission changes take effect immediately and are reflected in the VCS audit log
-- The materialized permission index (see Core Design Principles) means permission checks add sub-millisecond overhead even at 10 000+ concurrent agents
+- The materialized permission index (see Core Design Principles) means permission checks add sub-millisecond overhead even at 10 000+ concurrent agents within a workspace
 
 **Agent-to-agent collaboration**
 
