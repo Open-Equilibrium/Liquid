@@ -56,6 +56,14 @@ Signed manifests, capability checks, and zero-trust between components are
 implemented in phase 1. They are not added later. A public registry opening on
 an unsigned, unaudited codebase is a critical failure mode.
 
+**App developers never import platform-specific APIs.**
+`liquid_sdk` is the only interface to platform capabilities. If a developer
+building a Liquid app reaches for `dart:io`, `path_provider`, `url_launcher`,
+or any platform channel, that is a signal the SDK is missing an abstraction —
+not a reason to work around it. Add the missing API to `liquid_sdk` first.
+An app that imports platform-specific code cannot guarantee cross-platform
+availability and must be rejected by the registry CI.
+
 ---
 
 ## 2. Repository Layout
@@ -1014,6 +1022,95 @@ SDK versions follow semver. The `AppManifest.sdkVersion` field declares the
 minimum SDK version required. The runtime rejects apps requiring a newer SDK
 than is installed, with a clear error message.
 
+### Platform Abstraction Contract
+
+The single most important developer-facing guarantee: **write one Dart package,
+run unchanged on Linux, Windows, macOS, iOS, and Android.** This guarantee is
+only possible if `liquid_sdk` is the complete interface to all platform
+capabilities.
+
+**Allowed imports in an app package:**
+
+| Allowed | Prohibited |
+|---|---|
+| `liquid_sdk` | `dart:io` |
+| `dart:core`, `dart:math`, `dart:convert` | `dart:html` |
+| `dart:typed_data`, `dart:async` | Any Flutter plugin (`path_provider`, `url_launcher`, `camera`, …) |
+| Pure Dart packages with no platform code | Any `MethodChannel` or platform channel |
+
+**`liquid_sdk` must cover every platform capability an app legitimately needs:**
+
+| App need | SDK API |
+|---|---|
+| Persistent storage | `VcsApi.read` / `VcsApi.write` |
+| Tenant-scoped config | `VcsApi.tenantConfig` |
+| Permission checks | `PermissionApi.check` |
+| Cross-component data | `InputSlot` / `OutputSlot` |
+| Notifications (phase 2) | `NotificationApi.send` |
+| Content sharing (phase 3) | `ShareApi.share` |
+| Deep links / navigation (phase 3) | `DeeplinkApi.register` |
+
+If a developer cannot accomplish a legitimate goal without a platform import,
+the SDK is incomplete. Open an SDK issue; do not bypass the abstraction.
+
+**Enforcement:**
+
+1. `sdk/liquid_sdk/analysis_options.yaml` includes a custom lint rule
+   `no_platform_imports` (implemented in `sdk/liquid_sdk_lint/`) that makes
+   importing banned packages an analyzer error.
+2. The registry CI pipeline runs `flutter build <target>` for all five targets
+   on every package upload. A package that fails any target is rejected with the
+   failing target named in the error.
+3. Reference apps (`apps/`) serve as the acceptance test: if they compile for
+   all five targets without platform imports, the contract holds.
+
+### SDK Performance Contract
+
+App developers must not implement their own caches or assume lower latency
+than these bounds. If a bound is exceeded, that is a platform regression.
+
+| API call | Expected latency | Condition |
+|---|---|---|
+| `VcsApi.read(path)` | < 20 ms p99 | Warm cache hit |
+| `VcsApi.read(path)` | < 200 ms p99 | Cold cache (Jujutsu read) |
+| `VcsApi.write(path, content)` | < 100 ms p99 | Single-file commit |
+| `VcsApi.tenantConfig` | < 1 ms | Loaded at mount, held in memory |
+| `PermissionApi.check(action, resource)` | < 1 ms p99 | Materialized index lookup |
+| `OutputSlot.emit(value)` | < 5 ms p99 | In-process broker (phase 1–2) |
+| `InputSlot.stream` first event | < 50 ms p99 | Same region (phase 4) |
+
+These targets apply per workspace. They are validated in Milestone 20 load tests.
+An app receiving slot events faster than < 50 ms p99 is a bonus, not a contract.
+
+### Component Isolation Enforcement
+
+ADR-006 prohibits direct Dart references between components. The following
+mechanisms make this enforceable without Dart isolates (which are rejected
+because they prohibit shared Flutter widget trees and require serialising
+every render update):
+
+**1 — Widget tree scoping.**
+`PageGrid` renders each `GridItem` with a fresh `LiquidComponentScope`
+`InheritedWidget` at its root. This scope holds the `ComponentContext` for that
+component only. `context.emitSlot` and `context.readSlot` are methods on
+`LiquidComponentContext` — they only exist in that component's widget subtree.
+
+**2 — No sibling access.**
+Flutter's `BuildContext.findAncestorWidgetOfExactType` walks only up the widget
+tree. Components are siblings under `PageGrid`, not ancestors of each other.
+A component cannot reach a `LiquidComponentScope` that is not its own ancestor.
+
+**3 — Static lint rule (`no_cross_component_reference`).**
+Shipped in `sdk/liquid_sdk_lint/`. Flags any `LiquidComponent` subclass field
+that is typed as another `LiquidComponent` subclass. Applied in the SDK's own
+`analysis_options.yaml` and recommended for all app packages. Applied as an
+error in registry CI.
+
+**4 — No shared API surface.**
+`liquid_sdk` exports no function that takes a `ComponentId` of a foreign
+component as an argument. The only way to address another component is via a
+named slot — which goes through the `SlotBroker` permission check in Rust.
+
 ---
 
 ## 12. Agent CLI Specification
@@ -1068,6 +1165,45 @@ has at minimum `{ "ok": true|false, "data": <payload> | null, "error": null | ".
 
 `--format text` (default) outputs human-readable lines. Errors go to stderr
 with a non-zero exit code.
+
+### App CLI surface design guidance
+
+App developers declare CLI commands in `AppManifest.cliCommands`. These are
+auto-generated as subcommands of `liquid app <instance-name>`. Rules for
+designing a good CLI surface:
+
+**Model commands around data, not UI actions.**
+`read component/pipeline-sheet --row 0` is good.
+`click-button add-row` is not a CLI command.
+
+**Every readable state must be readable via CLI.**
+If an agent cannot observe a component's current state via `liquid app ...
+read`, the app is not agent-friendly. Design the `read` handler first.
+
+**Every writable state must be writable via CLI.**
+The agent must be able to perform the same mutations as a human user.
+`liquid app <name> write component/<name> --data <json>` is the primary
+mutation surface.
+
+**Slot subscribe is the agent's event stream.**
+`liquid app <name> slot subscribe <slot-name>` streams newline-delimited JSON
+events to stdout indefinitely. Agents use this to react to changes. Every
+significant state change should be published to a slot.
+
+**`CliCommandDeclaration` schema:**
+```dart
+@immutable
+class CliCommandDeclaration {
+  final String verb;          // e.g. "read", "write", "export"
+  final String target;        // e.g. "component/pipeline-sheet"
+  final String description;   // shown in --help
+  final List<CliFlag> flags;  // --row, --format, etc.
+  final PermissionRequest requiredPermission; // checked before execution
+}
+```
+
+The Liquid runtime auto-generates `--help` output from these declarations.
+App developers do not write a CLI binary; the manifest is sufficient.
 
 ---
 
@@ -1218,4 +1354,38 @@ compatibility contract, and create security gaps (one component reading another'
 internal state).
 **Consequence:** The component runtime must enforce this — there is no legitimate
 reason for a component widget to receive another component widget as a constructor
-argument.
+argument. See §11 "Component Isolation Enforcement" for the concrete mechanisms.
+
+### ADR-007 — Component isolation uses widget tree scoping, not Dart isolates
+**Decision:** Component isolation is enforced via `LiquidComponentScope`
+`InheritedWidget` scoping + static lint rules. Dart isolates are not used.
+**Rationale:** Dart isolates would achieve memory isolation but require
+serialising all data crossing the isolate boundary, including every widget
+rebuild payload. For a UI framework with high-frequency slot events and shared
+Flutter widget trees, this overhead is unacceptable. Widget tree scoping
+achieves the same logical isolation (a component cannot address a sibling's
+context) at zero runtime cost. The lint rule (`no_cross_component_reference`)
+catches violations statically at app-build time, not at runtime.
+**Rejected alternative:** Dart isolates per component. Ruled out because:
+(a) Flutter widget trees cannot span isolates — each isolate needs its own
+Flutter engine instance, multiplying memory per component; (b) slot value
+serialisation adds latency that would break the < 5 ms p99 emit contract.
+**Consequence:** Component isolation is a Dart-level contract enforced by the
+SDK and linter, not an OS-level memory boundary. Malicious Dart code in a
+component could in theory bypass it — this is mitigated by signed manifests
+and registry review, not by isolates.
+
+### ADR-008 — `liquid_sdk` is the exclusive platform API for app developers
+**Decision:** Apps published to the registry may only import `liquid_sdk` and
+pure-Dart packages. Platform-specific Flutter plugins and `dart:io` are banned.
+**Rationale:** The write-once-run-everywhere guarantee depends on `liquid_sdk`
+being the complete abstraction over platform capabilities. Any platform import
+in an app breaks the guarantee for at least one of the five targets and
+introduces a dependency on capabilities the Liquid runtime cannot mediate
+(security, permissions, telemetry).
+**Consequence:** When a developer needs a platform capability not yet in
+`liquid_sdk`, the correct action is to add it to the SDK. This creates a
+virtuous cycle: each new capability request improves the SDK for all developers.
+Registry CI enforces the ban; a package failing `flutter build` on any target
+is rejected. The SDK ships a custom `liquid_sdk_lint` package that makes
+violations analyzer errors during development.
