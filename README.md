@@ -1,6 +1,6 @@
 # Liquid
 
-> An open-source, cross-platform UI framework and SDK for building apps, components, and extensions — with VCS, user management, and agent-ready permissions built in from day one.
+> An open-source, cross-platform UI framework and SDK for building apps, components, and extensions — with VCS, user management, and agent-ready permissions built in from day one. Designed for enterprise scale: 10 000+ users, 10 000+ agents, millions of files, millisecond latency.
 
 ---
 
@@ -8,7 +8,8 @@
 
 1. [Vision](#vision)
 2. [Why Liquid?](#why-liquid)
-3. [Core Concepts](#core-concepts)
+3. [Core Design Principles](#core-design-principles)
+4. [Core Concepts](#core-concepts)
    - [Explorer](#explorer)
    - [Pages and the Grid](#pages-and-the-grid)
    - [Apps](#apps)
@@ -18,14 +19,13 @@
    - [VCS (Jujutsu-native)](#vcs-jujutsu-native)
    - [User and Permission Management](#user-and-permission-management)
    - [Agents as First-Class Citizens](#agents-as-first-class-citizens)
-4. [SDK](#sdk)
-5. [Technology Stack](#technology-stack)
-6. [Self-Hosting](#self-hosting)
-7. [Scalability at Enterprise Scale](#scalability-at-enterprise-scale)
+5. [SDK](#sdk)
+6. [Technology Stack](#technology-stack)
+7. [Self-Hosting](#self-hosting)
 8. [Feasibility Assessment](#feasibility-assessment)
    - [What Is Technically Sound](#what-is-technically-sound)
    - [What Is Technically Novel and Hard](#what-is-technically-novel-and-hard)
-   - [Tauri Mobile: What It Is and Why Mobile-First Is Hard](#tauri-mobile-what-it-is-and-why-mobile-first-is-hard)
+   - [Running Liquid on Mobile: Tauri Mobile vs Flutter](#running-liquid-on-mobile-tauri-mobile-vs-flutter)
    - [Risk Register](#risk-register)
    - [Competitive Landscape](#competitive-landscape)
    - [Recommended Phasing](#recommended-phasing)
@@ -39,7 +39,9 @@ Liquid is a universal application platform — part UI framework, part SDK, part
 
 Where today's cross-platform stacks force trade-offs between native feel and developer ergonomics, Liquid targets both: a Rust core for performance and safety, a TypeScript surface for ecosystem reach, and a component model that is as composable as Notion blocks but without Notion's walled garden.
 
-Agents are not an afterthought. Liquid is designed from the ground up for environments where AI agents and human users collaborate at equal standing — sharing the same permission model, the same VCS audit trail, and the same UI surface.
+Agents are not an afterthought. Liquid is designed from the ground up for environments where AI agents and human users operate at equal standing — sharing the same identity model, the same permission system, and the same VCS audit trail. Agents interact through a structured CLI rather than a graphical UI, making them efficient at scale without requiring any rendering infrastructure.
+
+Performance, security, and scalability are non-negotiable constraints, not post-launch concerns. Every architectural decision in Liquid is evaluated against the target of 10 000+ human users, 10 000+ agents, millions of files, and millisecond operation latency.
 
 ---
 
@@ -52,8 +54,47 @@ Agents are not an afterthought. Liquid is designed from the ground up for enviro
 | Mobile apps are second-class citizens in "cross-platform" tools | Mobile-first grid layout and rendering pipeline |
 | Subscriptions required for core functionality | Fully self-hostable; no SaaS dependency |
 | Components are siloed inside apps, data cannot flow between them | Cross-app component data binding: any component can publish and consume typed data streams |
-| Agent access is coarse-grained or uncontrolled | Agents are first-class principals with the same fine-grained permission model as human users |
-| Frameworks are not built for enterprise scale | Designed for 10 000+ users, 10 000+ agents, and millions of files with millisecond operation latency |
+| Agent access is coarse-grained or uncontrolled | Agents are first-class principals with identity, roles, and fine-grained permissions; they operate via a structured CLI, not a GUI |
+| Frameworks are not built for enterprise scale | Scalability, performance, security, and stability are core design targets from day one — not retrofits |
+
+---
+
+## Core Design Principles
+
+These are not aspirational goals — they are hard constraints that every architectural decision must satisfy from the first commit.
+
+### Performance
+
+- **Target:** operations complete in milliseconds at full scale (10 000+ concurrent users and agents, millions of files)
+- **Mechanism:** the VCS layer (Jujutsu) is the durable write-ahead log and source of truth; it is never the hot read path
+- A **content-addressable read cache** (Redis-class) sits in front of the VCS. VCS objects are immutable by content hash, so cache invalidation is exact and cheap — a commit evicts only the changed hashes
+- All latency-sensitive reads (page loads, component data, permission checks) are served from the cache; the VCS is consulted only on cache miss or write
+- The data binding event bus is backpressure-aware; slow consumers do not stall fast producers
+
+### Scalability
+
+- **Target:** horizontal scaling with no single-node bottleneck at any layer
+- The Liquid server is stateless between requests; session state is stored in the cache layer
+- The permission system uses a **materialized permission index** — RBAC evaluation is a single key lookup, not a live graph traversal; the index is updated asynchronously on role/policy changes
+- VCS write throughput scales via partitioning by tenant; tenants are independent repositories
+- For multi-region deployments: a change event bus (Kafka-class) fans out commits to replica nodes; reads are local, writes are primary-with-async-replication
+- Agent workloads (which can be highly parallel) use the same stateless request path as human users — no special agent infrastructure needed
+
+### Security
+
+- **Zero-trust between components:** components are sandboxed; one component cannot access another component's data without an explicit data binding wired by a user with sufficient permission
+- **Capability-based permissions:** apps and agents receive only the minimum capabilities declared in their manifest; no implicit ambient authority
+- **Signed manifests:** every app, component, and extension package is cryptographically signed; the runtime refuses to load unsigned or tampered packages
+- **Agent authority limit:** an agent can never hold permissions exceeding those of the human principal who authorized it
+- **Audit by default:** all reads and writes — human or agent — are logged in the VCS operation log; the log is append-only and cannot be modified without creating a detectable fork
+- **Security reviews are a gate**, not a recommendation, before any public registry opens
+
+### Stability
+
+- **Typed contracts everywhere:** data binding slots are typed and versioned; a component cannot silently break a consumer by changing its output shape — schema changes require a version bump and a migration path
+- **No implicit side effects:** every state mutation goes through the VCS commit path; there is no out-of-band write mechanism
+- **Graceful degradation:** if a component fails, the rest of the page continues to render; component isolation prevents cascading failures
+- **API stability windows:** SDK APIs follow semantic versioning with a documented deprecation period; apps built against v1 of the SDK continue to work until v1 is formally retired
 
 ---
 
@@ -198,42 +239,58 @@ Liquid provides a unified identity and permission layer across all apps:
 
 ### Agents as First-Class Citizens
 
-Agents are not plugins, integrations, or privileged daemons in Liquid. They are principals — equal in standing to human users — and the entire framework is designed with this in mind.
+Agents are not plugins, integrations, or privileged daemons in Liquid. They are principals — equal in standing to human users — with one key difference: **agents do not have a graphical UI**. Instead, every app developed for Liquid exposes an agent-native CLI surface, and agents interact with Liquid exclusively through that interface.
+
+**Why CLI, not UI?**
+
+A human user opens a page, sees the grid, and drags components around. An agent does not need any of that. What an agent needs is a structured, scriptable interface to read data, perform operations, and write results — with the same permission boundaries a human would face. A CLI delivers exactly that: low overhead, easy to script, easy to test, and trivially parallelizable across thousands of concurrent agents.
 
 **Identity**
 
-Every agent has a unique identity within a tenant. It authenticates the same way a human user does and is subject to the same session and token management.
+Every agent has a unique identity registered within a tenant. It authenticates the same way a human user does (token-based, OIDC-compatible) and is subject to the same session and rate-limit management. Agents are provisioned by a human administrator who holds at least the permissions being granted.
+
+**The Liquid Agent CLI**
+
+Each app developed against the Liquid SDK automatically exposes a CLI surface alongside its graphical interface. The CLI is not a separate integration effort — it is generated from the same app manifest and component definitions that drive the UI.
+
+Example interactions:
+
+```sh
+# Read the contents of a page the agent has access to
+liquid read page/project-alpha --tenant acme-corp --as agent:research-bot
+
+# Write a new entry to a spreadsheet component
+liquid write component/budget-sheet --row '{"month":"May","cost":4200}' --as agent:finance-bot
+
+# Subscribe to a data slot and stream updates
+liquid subscribe slot/sales-pipeline:updated --as agent:crm-sync
+```
+
+All commands go through the same permission checks as the equivalent UI action. An agent issuing a `write` it does not have permission for receives the same error a human would.
 
 **Permissions**
 
 Agents receive roles and permission scopes through the same RBAC system as humans:
 
 - An agent can be granted read access to specific pages, components, or data fields and nothing else
-- An agent cannot exceed the permissions of the human who authorized it
+- An agent cannot exceed the permissions of the human principal who provisioned it
 - Permission changes take effect immediately and are reflected in the VCS audit log
-
-**UI surface**
-
-Agents are not limited to API access. An agent can:
-
-- Render its own components on a page (e.g., a summary card, a status widget, a generated chart)
-- Subscribe to component data slots and react to user-driven changes in real time
-- Write back to components it has write permission for, with every edit attributed and reversible
+- The materialized permission index (see Core Design Principles) means permission checks add sub-millisecond overhead even at 10 000+ concurrent agents
 
 **Agent-to-agent collaboration**
 
-Multiple agents can be assigned to the same tenant and page. They can communicate through the same data binding system components use — an agent publishes to a slot, another agent (or a component) subscribes to it. No special inter-agent API is needed.
+Multiple agents can be assigned to the same tenant. They collaborate through the same data binding system that components use: one agent writes to a slot, another subscribes to it via the CLI. No special inter-agent protocol is required.
 
 **Audit and reversibility**
 
-Because all writes go through the VCS layer, every action an agent takes is:
+Because all writes go through the VCS commit path, every action an agent takes is:
 
 - Attributed to that agent's identity
 - Timestamped
-- Reversible with a single undo operation
-- Visible in the operation log alongside human edits
+- Reversible with a single undo operation in the Liquid UI or CLI
+- Visible in the operation log alongside human edits, indistinguishable in format
 
-This makes agent work safe enough to allow in production environments, which is a primary design goal of Liquid.
+This makes agent work safe to allow in production environments — every change is traceable and every mistake is undoable.
 
 ---
 
@@ -241,13 +298,13 @@ This makes agent work safe enough to allow in production environments, which is 
 
 The Liquid SDK provides:
 
-- **App manifest** — declare dependencies, required permissions, grid size constraints
+- **App manifest** — declare dependencies, required permissions, grid size constraints, and CLI command surface
 - **Component protocol** — register components, declare input/output data slots, expose extension hooks
 - **Grid API** — request layout changes, respond to resize/maximize events
-- **Data binding API** — publish to output slots, subscribe to input slots, define slot types
+- **Data binding API** — publish to output slots, subscribe to input slots, define typed slot schemas
 - **VCS API** — read/write versioned content, access history, create branches
-- **Permission API** — query effective permissions for the current user or agent
-- **Agent API** — register agent identity, declare capabilities, manage lifecycle
+- **Permission API** — query effective permissions for the current user or agent (backed by the materialized index; sub-millisecond)
+- **Agent CLI surface** — declare which app operations are accessible via the Liquid agent CLI; the runtime generates the CLI commands from the manifest automatically; no separate integration effort
 - **Extension API** — hook into other apps/components if permitted
 
 Target languages: TypeScript (primary), with Rust bindings for performance-critical components.
@@ -259,11 +316,14 @@ Target languages: TypeScript (primary), with Rust bindings for performance-criti
 | Layer | Technology | Rationale |
 |---|---|---|
 | Core runtime | Rust | Memory safety, performance, cross-platform compilation |
-| UI rendering | WebView via Tauri | Proven cross-platform approach; see mobile discussion below |
+| Desktop UI shell | Tauri 2.x (WebView) | Proven Rust + TypeScript cross-platform desktop; production-stable |
 | App/component logic | TypeScript | Ecosystem size, developer familiarity |
 | VCS storage | Jujutsu | Operation log, cleaner conflict model vs. Git, large-repo performance |
-| Mobile shell | Tauri Mobile (experimental) | See [Tauri Mobile section](#tauri-mobile-what-it-is-and-why-mobile-first-is-hard) |
-| Data layer (enterprise) | Content-addressable store over Jujutsu + optional distributed cache | Millisecond reads at scale require a caching layer above raw VCS |
+| Mobile shell | Tauri Mobile or Flutter (decision in phase 2) | See [Running Liquid on Mobile](#running-liquid-on-mobile-tauri-mobile-vs-flutter) |
+| Read cache | Redis-class distributed cache | Sub-millisecond warm reads; content-addressed = exact invalidation |
+| Permission index | Materialized key-value store | Single-lookup permission checks at 20 000+ concurrent principals |
+| Event bus | Kafka-class message bus | Fan-out for multi-region replication and data binding at scale |
+| Agent interface | Liquid Agent CLI (generated from app manifest) | Structured, scriptable, zero rendering overhead |
 | Package registry | Self-hosted, open protocol | No vendor lock-in |
 
 ---
@@ -279,83 +339,30 @@ Liquid is designed to run without any external subscription:
 
 ---
 
-## Scalability at Enterprise Scale
-
-One of Liquid's explicit design targets is an organization with **10 000+ human users, 10 000+ agents, and millions of files** — all operating concurrently, with operations completing in milliseconds. This section examines whether that target is achievable and what architecture it requires.
-
-### The Challenge
-
-A VCS-backed content store is not a traditional database. Jujutsu (and Git underneath it) is optimized for correctness and history, not for low-latency random reads at high concurrency. Naively querying a Jujutsu repository for a single file at the scale of millions of objects and tens of thousands of concurrent users would be slow.
-
-The permission system faces a similar challenge: evaluating fine-grained per-field permissions for 20 000 simultaneous principals on every read/write is expensive if done naively.
-
-### Architecture for Scale
-
-Liquid's scalability strategy relies on three layers:
-
-**1. Content-addressable cache**
-
-Raw VCS objects are immutable once written (content-addressed by hash). This property makes them trivially cacheable:
-
-- A distributed read cache (Redis-class or equivalent) stores recently accessed objects by hash
-- Cache invalidation is exact: when a commit changes an object, only that hash is evicted
-- Cold reads hit Jujutsu; warm reads (the overwhelming majority in steady state) hit the cache in sub-millisecond time
-- The cache is horizontally scalable — add nodes as the user base grows
-
-**2. Permission index**
-
-Rather than evaluating the full RBAC graph on every operation, Liquid maintains a materialized permission index:
-
-- The index is updated asynchronously whenever roles or permissions change
-- Read checks are a single key lookup against the index
-- Write operations validate against the index before committing to the VCS layer
-- Index updates propagate within a configurable consistency window (e.g., < 1 second)
-
-**3. Event-driven replication**
-
-For multi-region or high-availability deployments:
-
-- A change event bus (Kafka-class or equivalent) fans out VCS commits to replica nodes
-- Each replica maintains its own cache and permission index
-- Reads are served locally; writes go to the primary and propagate asynchronously
-
-### Feasibility Verdict
-
-| Target | Feasible? | Condition |
-|---|---|---|
-| 10 000 concurrent human users | Yes | Standard web-scale architecture; well understood |
-| 10 000 concurrent agents | Yes | Agents use the same auth/permission path as humans; stateless request handling scales horizontally |
-| Millions of files | Yes | Content-addressable storage scales to this; Git/Jujutsu already handles monorepos of this size (see Google's internal tooling) |
-| Millisecond operation latency | **Conditionally yes** | Requires the caching layer described above; raw VCS reads are not millisecond at this scale without it |
-| Fine-grained per-field permissions at scale | Yes | Requires the materialized permission index; not feasible with live graph traversal |
-
-**The honest constraint:** millisecond latency at this scale is achievable but it is a significant systems engineering effort on top of the application layer. It requires treating the VCS as a durable write-ahead log and source of truth, not as the hot read path. The caching and indexing layers add operational complexity and are non-trivial to build correctly.
-
-This is not a reason to abandon the goal — every major collaborative platform (Figma, Notion, Linear) solves essentially the same problem. It is a reason to design the storage and permission interfaces cleanly in phase 1 so that the caching layer can be inserted later without rewriting the application logic.
-
----
-
 ## Feasibility Assessment
 
 ### What Is Technically Sound
 
 **Cross-platform desktop shell (Linux, Windows, macOS)**
-Tauri has proven that a Rust backend + TypeScript frontend can ship a production-quality cross-platform desktop application. This part of the stack is well-understood in 2025.
+Tauri 2.x is production-stable. A Rust backend + TypeScript frontend cross-platform desktop application is a well-proven pattern in 2026.
 
 **Grid layout engine**
-Responsive grid layouts with spanning and drag-and-drop are solved problems in web rendering. The static-grid-with-spanning model Liquid uses is simpler than fully freeform canvas layouts and is straightforward to implement correctly.
+Responsive grid layouts with spanning and drag-and-drop are solved problems in web rendering. The static-grid-with-spanning model Liquid uses is simpler than fully freeform canvas layouts and straightforward to implement correctly.
 
 **Component data binding**
-Typed publish/subscribe between components is a well-understood pattern (think RxJS, spreadsheet cell references, or Unix pipes). Implementing it as a first-class SDK primitive is new in this context but not technically risky.
+Typed publish/subscribe between components is a well-understood pattern (RxJS, spreadsheet cell references, Unix pipes). Implementing it as a first-class SDK primitive is architecturally novel for a UI framework but not technically risky.
 
 **Multi-tenant user management**
 Tenant isolation, RBAC, and per-tenant app configuration are standard enterprise software patterns. Well-documented, well-tested.
 
-**VCS-backed storage**
-Using a VCS as a content store is unconventional but not unprecedented (Obsidian with Git, Foam, etc.). Jujutsu's operation log makes this more ergonomic than Git. The main implementation work is building a high-level content API on top of Jujutsu's low-level operations.
+**VCS-backed storage with caching**
+Using a VCS as a content store is unconventional but sound. Jujutsu's operation log and content-addressed object model are particularly well-suited: objects are immutable by hash, making a Redis-class read cache trivially correct. Every major collaborative platform (Figma, Notion, Linear) uses a write-ahead log as durable storage with a caching layer for hot reads — Liquid's architecture follows the same proven pattern.
 
-**Agent-as-principal model**
-Treating AI agents as first-class RBAC principals is straightforward to implement once the RBAC model exists. The design insight is correct and forward-looking.
+**Enterprise-scale permission system**
+A materialized permission index (RBAC evaluated once on policy change, results stored for O(1) lookup) is the standard approach for fine-grained permissions at tens of thousands of concurrent principals. This is operationally non-trivial but architecturally well-understood.
+
+**Agent-as-principal with CLI interface**
+Treating AI agents as first-class RBAC principals with a generated CLI surface is straightforward to implement once the RBAC model and app manifest format exist. The CLI generation pattern (manifest → commands) is the same approach used by tools like the AWS CLI and Kubernetes kubectl.
 
 **Extension system**
 Hook-based extension architectures are mature (VS Code's extension API is the gold standard). Replicating a restricted version of this is achievable.
@@ -370,7 +377,7 @@ For a component built by Developer A to run correctly inside an app built by Dev
 
 **Scalable VCS + caching layer (MEDIUM difficulty)**
 
-As described in the scalability section, achieving millisecond latency at enterprise scale requires an explicit caching and indexing layer on top of Jujutsu. This is architecturally standard but non-trivial to implement and operate. It must be designed for in phase 1 even if it is not fully implemented until phase 2.
+Achieving millisecond latency at enterprise scale requires a caching and indexing layer in front of Jujutsu (see Core Design Principles). The architecture is standard, but the interface between the application layer and the storage/cache layer must be defined cleanly in phase 1. Retrofitting it later means rewriting application code. The effort is non-trivial but the approach is well-understood.
 
 **Jujutsu ecosystem maturity (MEDIUM difficulty)**
 
@@ -378,40 +385,46 @@ Jujutsu's library API (jj-lib) is not yet stable. Building a production system o
 
 ---
 
-### Tauri Mobile: What It Is and Why Mobile-First Is Hard
+### Running Liquid on Mobile: Tauri Mobile vs Flutter
 
-**What is Tauri Mobile?**
+**The core question: how does Liquid get onto a phone at all?**
 
-Tauri is a framework for building desktop applications using a Rust backend and a web-based frontend (HTML/CSS/TypeScript). The desktop version is mature and production-ready. **Tauri Mobile** is Tauri's extension of this model to iOS and Android: the same Rust core and TypeScript UI, packaged as a native iOS app (using WKWebView) or an Android app (using the system WebView).
+On Linux, Windows, and macOS, Tauri handles packaging. It wraps the Rust core and the TypeScript UI into a native desktop window that the OS can launch — no browser needed, no Electron-style bundled Chromium. The result is a small, fast native app.
 
-Tauri Mobile lets developers write one codebase and compile it to Linux, Windows, macOS, iOS, and Android. On paper this is exactly what Liquid needs.
+On iOS and Android, the situation is different. Apple and Google each have their own app ecosystems with strict rules: to distribute on the App Store or Play Store, the code must be packaged as a native app in a format they accept. You cannot just ship a web page or a Linux binary. This means Liquid needs a separate packaging and runtime strategy for mobile — and that is where Tauri Mobile and Flutter come in.
 
-**Why mobile-first is hard with Tauri Mobile**
+**Option A: Tauri Mobile**
 
-*1. Tauri Mobile is still experimental (as of 2025)*
-The mobile target was introduced in Tauri v2 and has not yet reached the same stability level as the desktop target. APIs are still changing, and the number of production apps shipping with it is small. Relying on it as the foundation for a mobile-first product means accepting upstream instability.
+Tauri Mobile (introduced in Tauri v2.0, stable since October 2024) extends Tauri's model to iOS and Android. The Rust core compiles to a native library; the TypeScript UI runs inside the platform's built-in WebView (WKWebView on iOS, Android System WebView on Android). One codebase, five targets.
 
-*2. WebView fragmentation on mobile*
-On iOS, all WebViews must use Apple's WKWebView engine — apps cannot bundle their own browser engine (unlike desktop, where Tauri bundles the OS WebView but Chrome/Firefox don't run as WebViews). This means:
-- CSS and JavaScript behavior is tied to the iOS version the user is running
-- Web APIs available on WKWebView lag behind those available in desktop browsers
-- Performance-sensitive rendering (animations, large grids, canvas) can behave differently than expected
+*Current status (2026):* Tauri Mobile is production-ready for straightforward apps. Native APIs for biometric auth, notifications, NFC, clipboard, and deep links are available. The mobile targets reached stable API status in v2.0.0. The gap relative to the desktop version is that not all desktop plugins have been ported to mobile yet, and the Tauri team has described v2 mobile as "a solid foundation" rather than feature-complete.
 
-On Android, the WebView is the system Chromium, which varies by Android version and device manufacturer. In practice, Android WebView is more capable than WKWebView but still not identical to a native rendering pipeline.
+*Limitations that matter for Liquid:*
 
-*3. Mobile UX expectations are fundamentally different*
-Native iOS and Android apps are built with platform-specific UI primitives (UIKit/SwiftUI on iOS, Jetpack Compose on Android) that provide gestures, animations, and interactions users expect — swipe-to-dismiss, momentum scrolling, haptic feedback, pull-to-refresh. Reproducing all of these faithfully inside a WebView requires significant custom CSS and JavaScript, and the results rarely feel fully native.
+- **WebView fragmentation** — on iOS, Apple mandates WKWebView for all third-party apps; no alternative engine is permitted. WKWebView's CSS and JavaScript behavior is tied to the iOS version. On Android, the WebView is the system Chromium and varies by device and Android version.
+- **Native UX feel** — swipe gestures, momentum scrolling, haptic feedback, and platform-specific animations that users expect on iOS and Android are not automatic inside a WebView. Reproducing them requires significant CSS and JavaScript work, and the results can still fall short of a fully native feel.
+- **Performance ceiling** — mobile hardware is meaningfully weaker than desktop. A WebView rendering pipeline adds overhead. A grid with multiple live data-binding components needs careful optimization to stay smooth at 60 fps.
 
-*4. Performance envelope*
-Mobile CPUs and GPUs are significantly less powerful than their desktop counterparts. A grid-based layout with multiple live components, real-time data bindings, and VCS-backed storage needs to be carefully optimized for mobile. A WebView rendering pipeline adds overhead that a native rendering pipeline (Flutter's Impeller, for example) avoids.
+**Option B: Flutter**
 
-**Alternative: Flutter**
+Flutter (v3.38, November 2025 — now in its "Production Era") does not use a WebView at all. It renders everything through its own GPU-accelerated pipeline called Impeller, which is fully stable on iOS and Android as of Flutter 3.22 and delivers consistent 60/120 fps across devices without shader compilation jank. Flutter compiles to native ARM binaries and communicates directly with platform APIs.
 
-Flutter renders using its own GPU-accelerated pipeline (Impeller on iOS/Android), which sidesteps WebView fragmentation entirely and delivers consistently native-feeling performance. The trade-off is adopting Dart as a second language alongside Rust and TypeScript, which diverges from Liquid's core stack.
+*Trade-off:* Flutter requires Dart as a fourth language (alongside Rust, TypeScript, and any Swift/Kotlin for native plugins). It diverges from Liquid's core stack. However, with a clean Rust core library, the Flutter shell can call into the same Rust business logic via FFI — it only replaces the rendering and packaging layer.
+
+**Comparison**
+
+| | Tauri Mobile | Flutter |
+|---|---|---|
+| Language overhead | None (same TS/Rust) | Dart (new language) |
+| Rendering | Platform WebView | Custom GPU pipeline (Impeller) |
+| Native UX feel | Requires CSS/JS effort | Native by default |
+| Mobile performance | Good, WebView-limited | Excellent, no WebView |
+| Production status (2026) | Stable, feature gaps vs desktop | Production Era, fully stable |
+| Desktop support | Yes (same codebase) | Yes but less mature than mobile |
 
 **Recommendation**
 
-Treat mobile as a phase 2 or phase 3 target. In phase 1, prove the desktop experience and SDK. Before committing to Tauri Mobile, run a 2–3 week technical spike: build the grid layout and one data-binding component on iOS and Android, measure rendering performance, and assess how much of the expected UX can be achieved in a WebView. If the spike results are poor, evaluate Flutter as a mobile-only frontend with a shared Rust core.
+Treat mobile as phase 2. In phase 1, ship and validate the desktop experience, SDK, and agent CLI. Before committing to either mobile approach, run a 2–3 week spike: implement the Liquid grid layout and one data-binding component pair on a real iOS and Android device using Tauri Mobile. Measure frame rate, gesture responsiveness, and overall feel. If the result meets the quality bar, proceed with Tauri Mobile (zero stack overhead). If it does not, adopt Flutter with a shared Rust core for the business logic layer.
 
 ---
 
@@ -419,15 +432,15 @@ Treat mobile as a phase 2 or phase 3 target. In phase 1, prove the desktop exper
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Mobile targets (iOS/Android) delayed or cut | High | Medium | Treat mobile as phase 2; run technical spike before committing |
-| Cross-app component protocol fails to attract third-party developers | Medium | High | Ship 5–10 first-party apps to prove the protocol before opening |
-| Jujutsu API instability causes rework | Medium | Medium | Pin jj-lib version; track upstream; budget migration time |
-| Caching/indexing layer under-designed in phase 1, requires rewrite | Medium | High | Define clean storage and permission interfaces early; stub the cache layer |
-| Tauri Mobile not production-ready when needed | High | Medium | Evaluate Flutter as fallback; keep rendering layer swappable |
+| Mobile UX quality bar not met with Tauri Mobile WebView | Medium | Medium | Run phase 2 spike on real devices; keep Flutter as a drop-in alternative for the rendering layer only |
+| Cross-app component protocol fails to attract third-party developers | Medium | High | Ship 5–10 first-party apps to prove the protocol before opening it |
+| Jujutsu API instability causes rework | Medium | Medium | Pin jj-lib version; track upstream; budget migration time each release |
+| Cache/permission index under-designed in phase 1, requires rewrite | Medium | High | Define clean storage and permission interfaces in phase 1; cache layer can be stubbed but the interface must be final |
 | Scope creep kills momentum | High | High | Phase strictly; cut features ruthlessly in v1 |
-| Open-source contributor acquisition | Medium | Medium | Strong developer docs and a compelling demo early |
-| Security vulnerabilities in extension sandboxing | Medium | High | Capability-based permissions; security audit before public registry |
-| Agent identity spoofing or privilege escalation | Medium | High | Treat agent auth as a first-class security surface from day one |
+| Open-source contributor acquisition | Medium | Medium | Strong developer docs and a compelling demo app shipped early |
+| Security vulnerability in extension sandboxing | Medium | High | Capability-based permissions; mandatory security audit before public registry opens |
+| Agent identity spoofing or privilege escalation | Medium | High | Agent auth is a first-class security surface; zero-trust between agent and host from the first implementation |
+| Jujutsu write throughput ceiling under heavy agent workloads | Low | High | Partition by tenant from day one; each tenant is an independent Jujutsu repo; scale horizontally |
 
 ---
 
@@ -451,41 +464,45 @@ Liquid's combination of **open SDK + cross-app data-binding components + VCS-nat
 
 **Phase 1 — Desktop shell + SDK foundation (12–18 months, small team)**
 
-- Liquid shell for Linux, Windows, macOS (Tauri)
+- Liquid shell for Linux, Windows, macOS (Tauri 2.x)
 - Explorer panel with page tree (icons, subpages, drag-and-drop) and tag-based sections
-- Grid-based page layout with spanning and maximize
+- Grid-based page layout with cell spanning and maximize
 - Component data binding (typed output/input slots, wiring UI)
 - First-party TextEditor, Spreadsheet, and Chart apps to prove the SDK and data binding
-- Basic user/permission management (single-tenant)
-- Jujutsu-backed storage with clean storage interface (cache layer stubbed)
-- TypeScript SDK with App manifest, Component protocol, Data binding API, VCS API
-- Agent identity and permissions (agents can read/write through the same auth path as humans)
+- User/permission management (single-tenant), OIDC-compatible auth
+- Jujutsu-backed storage with clean storage interface abstraction; read cache and permission index are stubbed behind the interface (implementation can be in-process for phase 1, swapped for distributed in phase 2 without application changes)
+- TypeScript SDK: App manifest, Component protocol, Data binding API, VCS API, Agent CLI surface generator
+- Agent identity, authentication, and CLI — agents can read/write via `liquid` CLI through the same permission path as human users; all edits are attributed and reversible
 
-Success criterion: a developer can build and ship a Liquid app with data-binding components in under a day. An agent can be assigned to a tenant and perform versioned edits with a full audit trail.
+Success criterion: a developer builds a Liquid app with data-binding components in under a day. An agent is provisioned, assigned a role, and performs versioned edits with a full audit trail — entirely via CLI.
 
 **Phase 2 — Component protocol + multi-tenant + scale (6–12 months)**
 
-- Cross-app component protocol v1 (published, stable)
-- Multi-tenant support
+- Cross-app component protocol v1 (published, stable, versioned)
+- Multi-tenant support; tenant-partitioned Jujutsu repositories
 - Extension API
-- Materialized permission index and read cache (enterprise scale targets)
-- Self-hosted registry
-- Agent-to-agent data binding and collaboration patterns
+- Distributed read cache and materialized permission index deployed (replaces phase 1 stubs)
+- Self-hosted registry with signed package verification
+- Agent-to-agent data binding via CLI slot subscription
+- Mobile spike: build grid + one data-binding pair on real iOS/Android devices with Tauri Mobile; decide Tauri Mobile vs Flutter
 
-**Phase 3 — Mobile + ecosystem**
+**Phase 3 — Mobile + ecosystem + HA**
 
-- iOS and Android (decision between Tauri Mobile and Flutter based on phase 1 spike results)
-- Community app ecosystem
+- iOS and Android (Tauri Mobile if spike passed quality bar; Flutter otherwise)
 - Multi-region / high-availability deployment guide
+- Community app ecosystem opened
+- Performance hardening: profiling at 10 000+ concurrent sessions, load testing, SLA documentation
 
 ---
 
 ## Conclusion
 
-Liquid addresses real, under-served problems: VCS-native content, cross-app data-binding composability, agent-aware permissions at parity with human users, and a scalable enterprise platform without SaaS lock-in. The vision is coherent and the market gap is genuine.
+Liquid addresses real, under-served problems: VCS-native content, cross-app data-binding composability, agents as genuine first-class principals operating through a structured CLI, and a platform built for enterprise scale without SaaS lock-in.
 
-The scalability target — 10 000+ users, 10 000+ agents, millions of files, millisecond latency — is achievable but requires deliberate architecture: a content-addressable read cache and a materialized permission index sitting in front of the VCS layer. These are not exotic components, but they must be designed for from phase 1, not retrofitted later.
+Performance, security, scalability, and stability are not aspirational — they are design constraints enforced from phase 1. The key architectural decisions that make the scale targets achievable are all standard, proven patterns: content-addressed caching, a materialized permission index, tenant-partitioned storage, and a stateless request path. None of them are exotic; all of them must be designed for early so they can be swapped from stubs to production implementations in phase 2 without touching application code.
 
-The primary execution risk remains **scope**. The project as described is equivalent in scale to building VS Code, Notion, an enterprise identity system, and a VCS integration layer simultaneously. The path to success is aggressive phasing: ship a desktop-only v1 that proves the SDK, data binding model, and agent-as-principal design; attract contributors; and expand to mobile and enterprise scale only after the core is stable.
+The mobile question is no longer a binary between "Tauri Mobile is experimental" and "rewrite in Flutter." Tauri 2.x mobile is production-stable as of 2026. The remaining question is whether WebView-based rendering meets Liquid's quality bar for a mobile-first experience — and that is answered by a focused spike in phase 2, not by assumption.
 
-With disciplined scoping, Liquid is feasible. Without it, it joins the long list of ambitious open-source platforms that never shipped.
+The primary execution risk remains **scope**. The path to success is shipping a desktop v1 that demonstrates the SDK, data binding, agent CLI, and VCS audit trail working together convincingly. That is the proof of concept that attracts contributors and validates the protocol before it is opened to the community.
+
+With disciplined phasing, Liquid is feasible. Without it, it joins the long list of ambitious open-source platforms that never shipped.
