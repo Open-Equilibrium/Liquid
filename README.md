@@ -10,12 +10,13 @@
 2. [Why Liquid?](#why-liquid)
 3. [Core Design Principles](#core-design-principles)
 4. [Core Concepts](#core-concepts)
+   - [Abstraction Model](#abstraction-model)
    - [Explorer](#explorer)
    - [Pages and the Grid](#pages-and-the-grid)
-   - [Apps](#apps)
+   - [Workspaces](#workspaces)
+   - [Apps and App Instances](#apps-and-app-instances)
    - [Components and Data Binding](#components-and-data-binding)
    - [Extensions](#extensions)
-   - [Tenants](#tenants)
    - [VCS (Jujutsu-native)](#vcs-jujutsu-native)
    - [User and Permission Management](#user-and-permission-management)
    - [Agents as First-Class Citizens](#agents-as-first-class-citizens)
@@ -73,12 +74,12 @@ These are not aspirational goals — they are hard constraints that every archit
 
 ### Scalability
 
-**Scope: per workspace.** Liquid's scalability targets apply at the workspace level — the same unit Notion calls a workspace. A single Liquid installation hosts many independent workspaces (mapped to tenants). Each workspace scales on its own to 10 000+ human users, 10 000+ agents, and millions of files. One workspace's load never affects another. The total capacity of a Liquid installation is the sum of its workspaces and scales horizontally by adding nodes, not by redesigning the application.
+**Scope: per workspace.** Liquid's scalability targets apply at the workspace level. A single Liquid installation hosts many independent workspaces. Each workspace scales on its own to 10 000+ human users, 10 000+ agents, and millions of files. One workspace's load never affects another. The total capacity of a Liquid installation is the sum of its workspaces and scales horizontally by adding nodes, not by redesigning the application.
 
 - **Target:** horizontal scaling with no single-node bottleneck at any layer
 - The Liquid server is stateless between requests; session state is stored in the cache layer
 - The permission system uses a **materialized permission index** — RBAC evaluation is a single key lookup, not a live graph traversal; the index is updated asynchronously on role/policy changes
-- VCS write throughput scales via **partitioning by workspace (tenant)**; each workspace is an independent Jujutsu repository — one workspace's commit load has zero impact on another
+- VCS write throughput scales via **partitioning by workspace**; each workspace is an independent Jujutsu repository — one workspace's commit load has zero impact on another
 - For multi-region deployments: a change event bus (Kafka-class) fans out commits to replica nodes; reads are local, writes are primary-with-async-replication
 - Agent workloads (which can be highly parallel) use the same stateless request path as human users — no special agent infrastructure needed
 
@@ -102,13 +103,48 @@ These are not aspirational goals — they are hard constraints that every archit
 
 ## Core Concepts
 
+### Abstraction Model
+
+Every entity in Liquid sits at a well-defined layer. Understanding the hierarchy is the fastest way to understand the whole system.
+
+```
+User
+└── Workspace  (1..*)            personal, business, client project, …
+    ├── Page  (0..*)             detail view; navigable in explorer like Notion
+    │   └── Grid                 place and size any app instance or component
+    └── App Instance  (1..*)     each installation of an app in this workspace
+        ├── Tenant               the data / config context for this instance
+        ├── Component  (1..*)    atomic unit of UI + logic; placeable on any page
+        └── Extension  (0..*)    only if the app declares extension points
+```
+
+**User** — a single identity across the whole Liquid installation. One login, multiple workspaces.
+
+**Workspace** — the top-level isolation boundary. Each workspace has its own pages, app instances, users, agents, permissions, and VCS repository. Switching workspace switches the entire context.
+
+**Page** — the detail view on the right side of the shell. Pages are organised in a tree in the explorer (with icons, subpages, drag-and-drop — the same as Notion). Opening a page shows its grid. A user places any combination of app instances and individual components onto the grid, sizes them across cells, and arranges them freely. The page layout is itself versioned.
+
+**App Instance** — an app assigned to a workspace. The same app type can be installed multiple times; each installation is a separate instance with its own tenant.
+
+**Tenant** — the data and configuration context for one app instance. Two instances of the same app in the same workspace can connect to entirely different data sources via different tenants. Tenant is an app-instance-level concept — it is not managed at the workspace level.
+
+**Component** — the atomic building block inside an app. Components are the units that appear in grid cells, bind data between each other, and can be reused across app instances.
+
+**Extension** — enriches an existing app instance without forking it. Only available when the app itself declares that it supports extension points.
+
+---
+
 ### Explorer
 
-The left panel of the Liquid shell. It displays all available apps, components, pages, and tagged content. The explorer is the primary navigation surface for everything a user owns or has access to.
+The left panel of the Liquid shell. It is always scoped to the active workspace — everything visible belongs to or is accessible within that workspace.
+
+**Workspace switcher**
+
+A compact picker at the top of the explorer lets the user switch between their workspaces (e.g., Personal, Business, Client A). Switching workspace reloads the entire explorer and page context. The user's identity stays the same; only the active scope changes.
 
 **Page tree**
 
-Pages are first-class entities in the explorer, organized in a hierarchy:
+Pages are first-class entities in the explorer, organised in a hierarchy:
 
 - Pages can be nested as subpages to arbitrary depth, similar to Notion
 - Each page can carry a custom icon (emoji, image, or app-defined icon)
@@ -116,13 +152,17 @@ Pages are first-class entities in the explorer, organized in a hierarchy:
 - Inline renaming
 - Right-click context menu for creating subpages, moving, duplicating, or deleting
 
+**App instances**
+
+Each app instance assigned to the workspace appears in the explorer alongside pages. If the same app is installed twice with different tenants (e.g., two instances of a spreadsheet app pointing to different data sources), both instances are listed by their user-facing name, keeping them visually distinct.
+
 **Tags and custom sections**
 
 Beyond the page tree, the explorer supports a structured tag and filter system:
 
-- **Tags** — arbitrary labels attached to any entity (app, component, page, document)
+- **Tags** — arbitrary labels attached to any entity (app instance, component, page, document)
 - **Custom sections** — user-defined groupings backed by pattern-matching filter rules
-- **Visibility rules** — hide or surface content based on tag combinations, ownership, or tenant scope
+- **Visibility rules** — hide or surface content based on tag combinations, ownership, or role within the workspace
 
 The explorer is fully user-configurable. Power users can replicate a VS Code–style file tree, a Notion-style page hierarchy, or a flat Obsidian-style tag cloud using the same underlying mechanism.
 
@@ -130,17 +170,28 @@ The explorer is fully user-configurable. Power users can replicate a VS Code–s
 
 ### Pages and the Grid
 
-The right-hand content area is called a **page**. A page is organized by a fixed grid — a coordinate system of rows and columns that provides stable anchor points for layout.
+A **page** is the detail view — the main content area on the right side of the shell. Pages are the primary canvas where users compose their workspace. They are navigated and organised in the explorer exactly like Notion: nested in a tree, each with a custom icon, dragable into any order, with subpages to any depth.
 
-**Grid behavior**
+**What goes on a page**
 
-- The grid itself is static: its columns and rows do not move or resize dynamically
-- Apps and components placed on the grid are not confined to a single cell — they can span multiple columns, multiple rows, or both
-- Any app or component can be maximized to fill the entire page, temporarily covering other content
-- Rearranging apps means dragging them to a new grid position; they snap to grid boundaries
-- Resize handles allow expanding or contracting an app across more or fewer cells
+A page is a free composition surface. The user can place on it:
 
-This model gives users the predictability of a fixed layout with the flexibility of a widget-based workspace — similar to a mobile home screen where apps occupy discrete slots but can vary in size.
+- Any **app instance** installed in the current workspace (identified by its name and tenant)
+- Any individual **component** from any app instance, without needing to place the whole app
+- Any mix of the above, in any combination
+
+Everything placed on a page is sized and arranged using the grid.
+
+**Grid behaviour**
+
+The grid is a fixed coordinate system of columns and rows — it does not resize dynamically. Items placed on it snap to grid boundaries and can span freely:
+
+- An item can occupy a single cell, or span multiple columns and rows
+- Any item can be maximised to fill the entire page
+- Items are repositioned by dragging to a new grid location
+- Resize handles let the user expand or contract an item across more or fewer cells
+
+This gives the predictability of a structured layout with the flexibility of a widget canvas — similar to a mobile home screen where each app occupies a discrete but resizable slot.
 
 **Pages in the explorer**
 
@@ -149,22 +200,45 @@ Pages appear in the explorer's page tree. Each page can:
 - Have a custom icon and display name
 - Contain subpages (nested to any depth)
 - Be tagged for filtering and custom sections
-- Be shared with specific users, roles, or agents within the tenant
+- Be shared with specific users, roles, or agents within the workspace
 
 Pages are versioned: every change to a page's layout, content, or subpage structure is a VCS commit.
 
 ---
 
-### Apps
+### Workspaces
 
-Apps are the primary unit of functionality in Liquid. They are analogous to mobile apps or ClickUp cards:
+A workspace is the top-level isolation boundary in Liquid — the same concept as a workspace in Notion or Slack. Every user starts with one workspace and can create or join additional ones.
 
-- Developed against the Liquid SDK
-- Distributed through Liquid's open registry or self-hosted registries
-- Rendered inside one or more grid cells on a page
-- Subject to the permission model of the tenant they run in
+Each workspace is fully self-contained:
 
-Apps are composites of components and have no special rendering privilege over components — they are organizational and distribution units, not rendering containers.
+- Its own set of app instances, pages, and data
+- Its own users and agents, each with workspace-scoped roles and permissions
+- Its own VCS repository — commits in one workspace never touch another
+- Its own cache partition and permission index, ensuring performance isolation at scale
+
+A user can belong to multiple workspaces simultaneously (e.g., Personal and Business). Switching workspace in the explorer changes the entire context: pages, app instances, and effective permissions all reload. The user's identity across workspaces is the same single Liquid account.
+
+Workspaces are the unit of scale: each workspace independently targets the 10 000+ user / 10 000+ agent / millions of files performance targets. One workspace's load has no impact on another.
+
+---
+
+### Apps and App Instances
+
+**Apps** are software packages — published to Liquid's open registry or a self-hosted registry, developed against the Liquid SDK. An app defines what components it contains, what permissions it requires, what extension points it exposes, and what CLI commands it surfaces for agents. Apps are the distributable, versioned artefact.
+
+**App instances** are what users actually work with. When a user adds an app to a workspace, they create an app instance — a specific installation of that app within that workspace. Each app instance:
+
+- Gets a user-facing name (shown in the explorer and grid)
+- Is bound to a **tenant** — the data and configuration context that tells this instance what backend, credentials, or data store to connect to
+- Has its own permission scope within the workspace
+- Is independently versioned in the workspace VCS
+
+**The same app can be installed multiple times in the same workspace, each with a different tenant.** This is intentional and a first-class feature:
+
+> *Example:* A team adds a CRM app to their Business workspace twice — one instance with a tenant pointing to the US market data store, another with a tenant pointing to the EU market data store. Both instances appear in the explorer by name ("CRM — US" and "CRM — EU"), can be placed on pages independently, and expose separate data slots. An agent can interact with each instance via its own CLI address.
+
+App instances are the rendering units in the grid. They are not containers for components — they are the organisational and distribution unit. Components are what get rendered inside grid cells.
 
 ---
 
@@ -194,25 +268,16 @@ Data bindings are stored as part of the page definition and are therefore versio
 
 ### Extensions
 
-Extensions enrich existing apps and components without forking them:
+Extensions enrich an existing app instance without forking the app. **An extension can only be applied to an app instance if the app itself declares that it supports extension points** — apps opt in explicitly in their manifest.
 
-- Hook into lifecycle events of any app or component they have permission to extend
-- Can add UI surface, transform data, or intercept and republish data slot values
-- Distributed and versioned independently from the host app
+When an app supports extensions:
 
-Extensions follow the same permission model as apps and are subject to the same VCS audit trail.
+- Extensions hook into the lifecycle events or data slots the app has declared as extensible
+- They can add UI surface within the app's grid area, transform data flowing through a slot, or republish enriched values to downstream components
+- They are distributed and versioned independently from the host app — an extension update does not require an app update
+- Multiple extensions can be active on the same app instance simultaneously, applied in a declared order
 
----
-
-### Tenants
-
-A **workspace** (called a tenant internally) is an isolated environment with its own apps, pages, data, users, agents, and permission scopes — the same concept as a Notion workspace. A single Liquid user can belong to multiple workspaces:
-
-- Example: one workspace for personal use, one for a work organisation
-- Switching workspaces switches the full context: the explorer content, pages, and the user's effective permissions
-- Agents are assigned to a workspace and inherit only that workspace's permission scope
-- In an enterprise deployment, workspaces map to organisational units (teams, departments, external partners)
-- Each workspace is an independent unit of scale — its VCS repository, cache partition, and permission index are isolated from every other workspace on the same installation
+Extensions follow the same permission model as apps: they are signed packages, require explicit user approval to install, and are subject to the same VCS audit trail. An extension cannot access any data or lifecycle event the host app has not explicitly exposed.
 
 ---
 
@@ -235,7 +300,8 @@ Jujutsu was chosen over Git for its cleaner operation model, better conflict han
 Liquid provides a unified identity and permission layer across all apps:
 
 - Users are defined once per Liquid installation or federated via OIDC
-- Permissions are scoped to: tenant → app → component → page → field
+- Permissions are scoped to: **workspace → app instance (tenant) → component → page → field**
+- A user's role in one workspace is entirely independent of their role in another
 - Audit log of all access is stored in the VCS operation log
 
 ---
@@ -250,7 +316,7 @@ A human user opens a page, sees the grid, and drags components around. An agent 
 
 **Identity**
 
-Every agent has a unique identity registered within a tenant. It authenticates the same way a human user does (token-based, OIDC-compatible) and is subject to the same session and rate-limit management. Agents are provisioned by a human administrator who holds at least the permissions being granted.
+Every agent has a unique identity registered within a workspace. It authenticates the same way a human user does (token-based, OIDC-compatible) and is subject to the same session and rate-limit management. Agents are provisioned by a human administrator who holds at least the permissions being granted.
 
 **The Liquid Agent CLI**
 
@@ -259,14 +325,17 @@ Each app developed against the Liquid SDK automatically exposes a CLI surface al
 Example interactions:
 
 ```sh
-# Read the contents of a page the agent has access to
-liquid read page/project-alpha --tenant acme-corp --as agent:research-bot
+# Read a page in a workspace
+liquid read page/project-alpha --workspace acme-corp --as agent:research-bot
 
-# Write a new entry to a spreadsheet component
-liquid write component/budget-sheet --row '{"month":"May","cost":4200}' --as agent:finance-bot
+# Write a row to a component inside a specific app instance (identified by its tenant config)
+liquid write app/crm-us/component/pipeline-sheet \
+  --row '{"month":"May","revenue":42000}' \
+  --workspace acme-corp --as agent:finance-bot
 
-# Subscribe to a data slot and stream updates
-liquid subscribe slot/sales-pipeline:updated --as agent:crm-sync
+# Subscribe to a data slot on an app instance and stream updates
+liquid subscribe app/crm-eu/slot/deals:updated \
+  --workspace acme-corp --as agent:crm-sync
 ```
 
 All commands go through the same permission checks as the equivalent UI action. An agent issuing a `write` it does not have permission for receives the same error a human would.
@@ -282,7 +351,7 @@ Agents receive roles and permission scopes through the same RBAC system as human
 
 **Agent-to-agent collaboration**
 
-Multiple agents can be assigned to the same tenant. They collaborate through the same data binding system that components use: one agent writes to a slot, another subscribes to it via the CLI. No special inter-agent protocol is required.
+Multiple agents can be assigned to the same workspace. They collaborate through the same data binding system that components use: one agent writes to a slot on an app instance, another subscribes to it via the CLI. No special inter-agent protocol is required.
 
 **Audit and reversibility**
 
@@ -301,14 +370,14 @@ This makes agent work safe to allow in production environments — every change 
 
 The Liquid SDK provides:
 
-- **App manifest** — declare dependencies, required permissions, grid size constraints, and CLI command surface
-- **Component protocol** — register components, declare input/output data slots, expose extension hooks
-- **Grid API** — request layout changes, respond to resize/maximize events
-- **Data binding API** — publish to output slots, subscribe to input slots, define typed slot schemas
-- **VCS API** — read/write versioned content, access history, create branches
-- **Permission API** — query effective permissions for the current user or agent (backed by the materialized index; sub-millisecond)
-- **Agent CLI surface** — declare which app operations are accessible via the Liquid agent CLI; the runtime generates the CLI commands from the manifest automatically; no separate integration effort
-- **Extension API** — hook into other apps/components if permitted
+- **App manifest** — declare the app's identity, required permissions, supported tenant configuration schema, grid size constraints, CLI command surface, and whether the app supports extensions
+- **Component protocol** — register components, declare typed input/output data slots, expose extension hooks (if the app opts in)
+- **Grid API** — request layout changes, respond to resize/maximise events from the page
+- **Data binding API** — publish to output slots, subscribe to input slots, define and version slot schemas
+- **VCS API** — read/write versioned content within the app instance's scope, access history, create branches
+- **Permission API** — query effective permissions for the current user or agent at workspace → app instance → component → field granularity (sub-millisecond, backed by the materialized index)
+- **Agent CLI surface** — declare which app operations agents may invoke; the runtime generates CLI commands from the manifest automatically; no separate implementation required
+- **Extension API** — implement extension hooks that the host app has explicitly exposed; unavailable if the host app does not declare extension points
 
 Target languages: Dart (primary, via Flutter), with Rust bindings via FFI for performance-critical and platform-native components.
 
@@ -355,8 +424,8 @@ Flutter's widget system supports arbitrary custom layouts. A static grid with ce
 **Component data binding**
 Typed publish/subscribe between components is a well-understood pattern (RxJS, spreadsheet cell references, Unix pipes). Implementing it as a first-class SDK primitive is architecturally novel for a UI framework but not technically risky.
 
-**Multi-tenant user management**
-Tenant isolation, RBAC, and per-tenant app configuration are standard enterprise software patterns. Well-documented, well-tested.
+**Workspace isolation and per-instance tenant configuration**
+Workspace-level isolation (independent VCS repo, cache, permission index) and per-app-instance tenant configuration are standard enterprise software patterns. Well-documented, well-tested.
 
 **VCS-backed storage with caching**
 Using a VCS as a content store is unconventional but sound. Jujutsu's operation log and content-addressed object model are particularly well-suited: objects are immutable by hash, making a Redis-class read cache trivially correct. Every major collaborative platform (Figma, Notion, Linear) uses a write-ahead log as durable storage with a caching layer for hot reads — Liquid's architecture follows the same proven pattern.
@@ -440,7 +509,7 @@ This means the performance-critical path (VCS operations, cache lookups, permiss
 | Open-source contributor acquisition | Medium | Medium | Strong developer docs and a compelling demo app shipped early |
 | Security vulnerability in extension sandboxing | Medium | High | Capability-based permissions; mandatory security audit before public registry opens |
 | Agent identity spoofing or privilege escalation | Medium | High | Agent auth is a first-class security surface; zero-trust between agent and host from the first implementation |
-| Jujutsu write throughput ceiling under heavy agent workloads | Low | High | Partition by tenant from day one; each tenant is an independent Jujutsu repo; scale horizontally |
+| Jujutsu write throughput ceiling under heavy agent workloads | Low | High | Partition by workspace from day one; each workspace is an independent Jujutsu repo; scale horizontally |
 
 ---
 
@@ -469,18 +538,18 @@ Liquid's combination of **open SDK + cross-app data-binding components + VCS-nat
 - Grid-based page layout with cell spanning and maximize
 - Component data binding (typed output/input slots, wiring UI)
 - First-party TextEditor, Spreadsheet, and Chart apps built in Dart to prove the SDK and data binding
-- User/permission management (single-tenant), OIDC-compatible auth
+- User/permission management (single workspace), OIDC-compatible auth
 - Jujutsu-backed storage with clean storage interface abstraction; read cache and permission index are stubbed behind the interface (swappable in phase 2 without application changes)
-- Dart SDK: App manifest, Component protocol, Data binding API, VCS API, Agent CLI surface declaration
-- Rust Agent CLI (`liquid` binary) — agents read/write through the same permission path as human users; all edits are attributed and reversible
+- Dart SDK: App manifest (incl. tenant config schema + extension point declarations), Component protocol, Data binding API, VCS API, Agent CLI surface declaration
+- Rust Agent CLI (`liquid` binary) — agents address app instances by `--workspace` + app instance name; all edits are attributed and reversible
 
-Success criterion: a developer builds a Liquid app with data-binding components in Dart in under a day. An agent is provisioned, assigned a role, and performs versioned edits with a full audit trail — entirely via CLI.
+Success criterion: a developer builds a Liquid app with data-binding components in Dart in under a day, installs it twice in the same workspace with different tenant configs, and an agent interacts with each instance independently via CLI.
 
-**Phase 2 — Mobile + component protocol + multi-tenant + scale (6–12 months)**
+**Phase 2 — Mobile + component protocol + multi-workspace + scale (6–12 months)**
 
 - iOS and Android — same Flutter/Dart codebase from phase 1; Flutter's build tooling targets both with minimal delta
 - Cross-app component protocol v1 (published, stable, versioned)
-- Multi-tenant support; tenant-partitioned Jujutsu repositories
+- Multi-workspace support; workspace-partitioned Jujutsu repositories
 - Extension API
 - Distributed read cache and materialized permission index deployed (replaces phase 1 stubs)
 - Self-hosted registry with signed package verification
@@ -498,7 +567,7 @@ Success criterion: a developer builds a Liquid app with data-binding components 
 
 Liquid addresses real, under-served problems: VCS-native content, cross-app data-binding composability, agents as genuine first-class principals operating through a structured CLI, and a platform built for enterprise scale without SaaS lock-in.
 
-Performance, security, scalability, and stability are not aspirational — they are design constraints enforced from phase 1. The key architectural decisions that make the scale targets achievable are all standard, proven patterns: content-addressed caching, a materialized permission index, tenant-partitioned storage, and a stateless request path. None of them are exotic; all of them must be designed for early so they can be swapped from stubs to production implementations in phase 2 without touching application code.
+Performance, security, scalability, and stability are not aspirational — they are design constraints enforced from phase 1. The key architectural decisions that make the scale targets achievable are all standard, proven patterns: content-addressed caching, a materialized permission index, workspace-partitioned storage, and a stateless request path. None of them are exotic; all of them must be designed for early so they can be swapped from stubs to production implementations in phase 2 without touching application code.
 
 Flutter as the universal UI layer resolves the mobile question cleanly: one Dart codebase targets all five platforms through a consistent GPU-rendered pipeline. There is no WebView ceiling, no platform-specific rendering divergence, and no split SDK. Mobile arrives in phase 2 as a build target, not a separate workstream. The Rust ↔ Dart boundary via `flutter_rust_bridge` keeps all business logic, storage, and security in Rust, where it belongs.
 
