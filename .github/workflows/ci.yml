@@ -14,6 +14,7 @@ jobs:
   # ── Rust ─────────────────────────────────────────────────────────────────────
   rust:
     name: Rust (${{ matrix.os }})
+    if: hashFiles('core/Cargo.toml') != ''
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -45,9 +46,24 @@ jobs:
       - name: Tests
         run: cargo test --workspace
 
+      - name: Coverage (ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cargo install cargo-tarpaulin --locked
+          cargo tarpaulin --workspace --out Xml --output-dir ../coverage/rust/
+
+      - name: Upload Rust coverage
+        if: matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage/rust/cobertura.xml
+          flags: rust
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   # ── Dart / Flutter (SDK) ──────────────────────────────────────────────────────
   sdk:
     name: Dart SDK
+    if: hashFiles('sdk/liquid_sdk/pubspec.yaml') != ''
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -71,12 +87,20 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
-      - name: Tests
-        run: flutter test
+      - name: Tests with coverage
+        run: flutter test --coverage
+
+      - name: Upload SDK coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: sdk/liquid_sdk/coverage/lcov.info
+          flags: sdk
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   # ── Flutter app ────────────────────────────────────────────────────────────────
   app:
     name: Flutter app (${{ matrix.target }})
+    if: hashFiles('app/pubspec.yaml') != ''
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -118,17 +142,25 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Check formatting (linux runner only)
+      - name: Check formatting (once, on linux runner)
         if: matrix.target == 'linux'
         run: dart format --output=none --set-exit-if-changed .
 
-      - name: Analyze (linux runner only)
+      - name: Analyze (once, on linux runner)
         if: matrix.target == 'linux'
         run: flutter analyze
 
-      - name: Unit + widget tests (linux runner only)
+      - name: Unit + widget tests with coverage (once, on linux runner)
         if: matrix.target == 'linux'
-        run: flutter test
+        run: flutter test --coverage
+
+      - name: Upload app coverage
+        if: matrix.target == 'linux'
+        uses: codecov/codecov-action@v4
+        with:
+          files: app/coverage/lcov.info
+          flags: app
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Build (release)
         run: |
@@ -141,9 +173,10 @@ jobs:
           esac
         shell: bash
 
-  # ── Reference apps — enforce Platform Abstraction Contract ───────────────────
+  # ── Reference apps — enforce Platform Abstraction Contract (ADR-008) ──────────
   apps-platform-check:
-    name: App platform build (${{ matrix.app }})
+    name: App platform check (${{ matrix.app }})
+    if: hashFiles('apps/text_editor/pubspec.yaml') != ''
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -170,17 +203,17 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Analyze (catches no_platform_imports lint violations)
+      - name: Analyze (enforces no_platform_imports lint)
         run: flutter analyze
 
-      - name: Build linux (validates single-SDK guarantee for one target)
+      - name: Build linux (validates single-SDK guarantee)
         run: flutter build linux --release
 
   # ── CLI integration tests ─────────────────────────────────────────────────────
   cli:
     name: CLI bats tests
-    runs-on: ubuntu-latest
     if: hashFiles('tests/cli/**') != ''
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -196,13 +229,10 @@ jobs:
       - name: Build liquid CLI
         run: cargo build -p liquid-cli --manifest-path core/Cargo.toml
 
-      - name: Install bats
+      - name: Install bats + helpers
         run: |
           git clone https://github.com/bats-core/bats-core.git /tmp/bats-core
           /tmp/bats-core/install.sh /usr/local
-
-      - name: Install bats helpers
-        run: |
           mkdir -p test_helper
           git clone https://github.com/bats-core/bats-support.git test_helper/bats-support
           git clone https://github.com/bats-core/bats-assert.git  test_helper/bats-assert

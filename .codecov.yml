@@ -1,0 +1,35 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 5%
+    patch:
+      default:
+        target: 70%
+        threshold: 10%
+
+  # Track coverage per layer
+  flags:
+    rust:
+      paths:
+        - core/
+      carryforward: true
+    sdk:
+      paths:
+        - sdk/liquid_sdk/
+      carryforward: true
+    app:
+      paths:
+        - app/
+      carryforward: true
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true
+
+ignore:
+  - "app/lib/bridge/**"   # generated FFI bindings — not meaningful to cover
+  - "**/*.g.dart"          # generated code
+  - "**/*.freezed.dart"    # generated code

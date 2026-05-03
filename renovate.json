@@ -1,0 +1,43 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["every weekend"],
+  "labels": ["deps"],
+  "commitMessagePrefix": "chore(deps):",
+  "packageRules": [
+    {
+      "description": "jj-lib is pinned and API-unstable — require manual review",
+      "matchPackageNames": ["jj-lib"],
+      "automerge": false,
+      "reviewers": ["benediktweber"],
+      "labels": ["deps", "breaking-risk"]
+    },
+    {
+      "description": "Auto-merge Rust patch updates",
+      "matchManagers": ["cargo"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Auto-merge Dart/Flutter patch and minor updates",
+      "matchManagers": ["pub"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Require manual review for Flutter SDK channel bumps",
+      "matchPackageNames": ["flutter"],
+      "automerge": false,
+      "reviewers": ["benediktweber"]
+    },
+    {
+      "description": "Group GitHub Actions updates into one PR",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions",
+      "automerge": true,
+      "automergeType": "pr"
+    }
+  ]
+}

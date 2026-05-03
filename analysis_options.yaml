@@ -1,0 +1,43 @@
+# Root-level Dart/Flutter analysis options.
+# Each Flutter package (app/, sdk/liquid_sdk/, apps/*) should include this via:
+#   include: ../../analysis_options.yaml   (adjust relative path as needed)
+#
+# The sdk/liquid_sdk package additionally includes liquid_sdk_lint for the
+# no_platform_imports and no_cross_component_reference rules (ADR-008, ADR-006).
+
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # Treat these as hard errors, not warnings
+    invalid_use_of_protected_member: error
+    missing_required_param: error
+    must_be_immutable: error
+    always_declare_return_types: error
+
+linter:
+  rules:
+    # Safety
+    - always_declare_return_types
+    - annotate_overrides
+    - avoid_print
+    - cancel_subscriptions
+    - close_sinks
+    - prefer_void_to_null
+    - throw_in_finally
+    - unnecessary_statements
+
+    # Style
+    - prefer_const_constructors
+    - prefer_const_declarations
+    - prefer_final_fields
+    - prefer_final_locals
+    - prefer_single_quotes
+    - use_key_in_widget_constructors
+    - sized_box_for_whitespace
+    - avoid_unnecessary_containers
+
+    # Correctness
+    - avoid_relative_lib_imports
+    - no_duplicate_case_values
+    - valid_regexps
