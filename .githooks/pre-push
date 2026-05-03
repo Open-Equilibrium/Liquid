@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Liquid pre-push hook — runs the full test suite before any push
+# Install: git config core.hooksPath .githooks
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+pass() { echo -e "${GREEN}✓${NC} $1"; }
+fail() { echo -e "${RED}✗${NC} $1"; exit 1; }
+skip() { echo -e "${YELLOW}–${NC} $1 (not found, skipping)"; }
+
+echo "=== Liquid pre-push ==="
+
+# ── Rust tests ────────────────────────────────────────────────────────────────
+if [ -f "core/Cargo.toml" ]; then
+  echo "▸ Rust tests"
+  cargo test --manifest-path core/Cargo.toml --workspace \
+    || fail "Rust tests failed. Fix all test failures before pushing."
+  pass "cargo test --workspace"
+else
+  skip "core/Cargo.toml"
+fi
+
+# ── Flutter unit + widget tests ───────────────────────────────────────────────
+if [ -f "app/pubspec.yaml" ]; then
+  echo "▸ Flutter tests (app)"
+  (cd app && flutter test) \
+    || fail "Flutter tests failed in app/. Fix before pushing."
+  pass "flutter test (app)"
+else
+  skip "app/pubspec.yaml"
+fi
+
+if [ -f "sdk/liquid_sdk/pubspec.yaml" ]; then
+  echo "▸ Flutter tests (sdk)"
+  (cd sdk/liquid_sdk && flutter test) \
+    || fail "Flutter tests failed in sdk/liquid_sdk/. Fix before pushing."
+  pass "flutter test (sdk)"
+else
+  skip "sdk/liquid_sdk/pubspec.yaml"
+fi
+
+# ── CLI integration tests ─────────────────────────────────────────────────────
+if [ -d "tests/cli" ] && command -v bats &>/dev/null; then
+  echo "▸ CLI bats tests"
+  bats tests/cli/ \
+    || fail "CLI integration tests failed. Fix before pushing."
+  pass "bats tests/cli/"
+elif [ -d "tests/cli" ]; then
+  echo -e "${YELLOW}⚠${NC}  tests/cli/ exists but bats is not installed."
+  echo "   Install: https://bats-core.readthedocs.io/en/stable/installation.html"
+else
+  skip "tests/cli/"
+fi
+
+echo "=== pre-push passed ==="
