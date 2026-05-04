@@ -24,6 +24,7 @@ about *how to build it*.
 13. [Data Binding Protocol](#13-data-binding-protocol)
 14. [Testing Strategy](#14-testing-strategy)
 15. [Key Design Decisions](#15-key-design-decisions)
+16. [Release Process](#16-release-process)
 
 ---
 
@@ -697,6 +698,8 @@ Frame rate ≥ 60 fps on grid interactions measured with Flutter DevTools.
 - [ ] Feature flag `distributed-cache` in `Cargo.toml` — off by default;
   single-binary deployments keep `InProcessCache` with no config change
 - [ ] Benchmark: warm read latency < 1 ms at p99 with 100 concurrent goroutines
+- [ ] Activate the `redis` service in `docker-compose.yml` (`just services-up phase3`)
+  for local development; document in `docs/ops/local-dev.md`
 
 **Success criterion:** Swap `InProcessCache` for `RedisCache` in integration
 tests; all tests pass; no changes to application code required.
@@ -776,6 +779,8 @@ hardening against the 10 000-user/workspace scale target.
   currently active on it
 - [ ] Backpressure: slow consumers are detected by lag monitoring; a consumer
   lagging > 10 000 events is dropped and must reconnect
+- [ ] Activate the `redpanda` service in `docker-compose.yml`
+  (`just services-up phase4`) for local development
 
 ---
 
@@ -1273,9 +1278,15 @@ before removing the old one.
   test directory.
 - **Widget tests** (`test/widget/`): test individual widgets in isolation using
   `flutter_test`.
-- **Integration tests** (`integration_test/`): full app on a real device or
-  emulator using `flutter_driver`. Covers the critical path:
-  create workspace → open page → place grid item → wire slots → verify binding.
+- **Integration / E2E tests** (`integration_test/`): use **`patrol`** as the
+  Flutter E2E framework (`flutter pub add patrol --dev`). `patrol` wraps
+  `integration_test` with ergonomic interaction APIs (`tester.tap`,
+  `tester.scroll`, `tester.longPress`) and first-class support for iOS/Android
+  native interactions. Covers the critical path: create workspace → open page →
+  place grid item → wire slots → verify binding.
+  - Add `patrol` to `app/pubspec.yaml` at Milestone 6 (Flutter shell skeleton)
+  - Add `patrol_cli` globally: `dart pub global activate patrol_cli`
+  - Run: `patrol test` (desktop) or `patrol test --device <id>` (mobile)
 
 ### Agent CLI
 
@@ -1283,21 +1294,23 @@ before removing the old one.
 - Tests provision an agent, execute CLI commands, assert output via `jq`
 - Run as part of CI on every push to `main`
 
-### CI pipeline (suggested)
+### CI pipeline
 
-```yaml
-jobs:
-  rust:
-    - cargo fmt --check
-    - cargo clippy -- -D warnings
-    - cargo test --workspace
-  flutter:
-    - dart format --output=none --set-exit-if-changed .
-    - flutter analyze
-    - flutter test
-  cli:
-    - bats tests/cli/
+Defined in `.github/workflows/ci.yml`. Jobs skip gracefully when their code
+layer does not exist yet (`hashFiles()` guards). Locally, use `just check`
+(runs `just lint` + `just test`) to replicate the full CI suite before pushing.
+
 ```
+rust            — fmt + clippy + tests  (Linux / Windows / macOS)
+sdk             — dart format + analyze + flutter test --coverage
+app             — dart format + analyze + flutter test --coverage + flutter build <5 targets>
+apps-platform-check — flutter analyze + linux build per reference app (ADR-008)
+cli             — bats tests/cli/
+```
+
+Coverage reports (tarpaulin for Rust, lcov for Flutter) are uploaded to Codecov
+with per-layer flags (`rust`, `sdk`, `app`). Set the `CODECOV_TOKEN` secret in
+GitHub → Settings → Secrets to enable upload.
 
 ---
 
@@ -1389,3 +1402,72 @@ virtuous cycle: each new capability request improves the SDK for all developers.
 Registry CI enforces the ban; a package failing `flutter build` on any target
 is rejected. The SDK ships a custom `liquid_sdk_lint` package that makes
 violations analyzer errors during development.
+
+---
+
+## 16. Release Process
+
+Releases are driven by Conventional Commit history using **`cargo-release`**
+(Rust crates) and matching version tags for the Flutter packages.
+
+### Setup (one-time)
+
+```sh
+cargo install cargo-release
+```
+
+### Version strategy
+
+Liquid follows **semver**. Version numbers are managed per crate/package.
+The `liquid-core` crate version is the canonical version for the overall
+release; SDK and CLI versions match it.
+
+### Release workflow
+
+```sh
+# 1. Ensure main is clean and all CI passes
+just check
+
+# 2. Dry run to preview what will change
+cargo release --manifest-path core/Cargo.toml patch --dry-run
+# (use: patch | minor | major)
+
+# 3. Execute the release — bumps versions, commits, tags, pushes
+cargo release --manifest-path core/Cargo.toml patch
+
+# 4. Publish Dart SDK to pub.dev (or self-hosted registry)
+cd sdk/liquid_sdk && flutter pub publish
+
+# 5. Publish apps to the Liquid registry
+just cli -- registry publish apps/text_editor/
+just cli -- registry publish apps/spreadsheet/
+just cli -- registry publish apps/chart/
+```
+
+### `cargo-release` configuration (`core/release.toml`)
+
+Create this file when first setting up releases:
+
+```toml
+# core/release.toml
+sign-commit = false          # enable when GPG is configured
+push = true
+publish = false              # Rust crates are internal; not published to crates.io
+tag-name = "v{{version}}"
+pre-release-commit-message = "chore(release): prepare v{{version}}"
+```
+
+### Changelog
+
+Conventional Commits history generates the changelog automatically.
+Keep commit messages clean — `feat` and `fix` types appear in release notes;
+`chore`, `refactor`, `test`, `docs` are grouped under "Other Changes" or omitted.
+
+### Release artefacts
+
+| Artefact | Where |
+|---|---|
+| `liquid` CLI binary | GitHub Release assets (built by CI on tag push) |
+| Flutter app (desktop) | GitHub Release assets |
+| `liquid_sdk` Dart package | pub.dev or self-hosted registry |
+| Reference apps | Liquid package registry |

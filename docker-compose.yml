@@ -1,0 +1,53 @@
+# Liquid — Docker Compose development environment
+#
+# Services are added progressively as phases are implemented:
+#   Phase 1  — no services required (all in-process stubs)
+#   Phase 3  — Redis (distributed cache + permission index)
+#   Phase 4  — Redpanda (Kafka-compatible event bus)
+#
+# Usage:
+#   just services-up    # start all services
+#   just services-down  # stop all services
+#   docker compose logs -f redis
+
+services:
+  # ── Phase 3 — Distributed cache & permission index ───────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    profiles: [phase3, phase4]
+
+  # ── Phase 4 — Kafka-compatible event bus (Redpanda) ──────────────────────
+  redpanda:
+    image: redpandadata/redpanda:latest
+    ports:
+      - "9092:9092"   # Kafka API
+      - "9644:9644"   # Admin API
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --overprovisioned
+      - --node-id=0
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://localhost:9092
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    profiles: [phase4]
+
+volumes:
+  redis-data:

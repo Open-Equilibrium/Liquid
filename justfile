@@ -7,10 +7,23 @@ default:
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
-# Install git hooks (run once after cloning)
+# Wire git hooks from lefthook.yml (run once after cloning)
 install-hooks:
-    git config core.hooksPath .githooks
+    lefthook install
     @echo "Git hooks installed."
+
+# Install lefthook itself (requires npm)
+install-lefthook:
+    npm install -g @evilmartians/lefthook
+    lefthook install
+
+# Start background services (Redis, Redpanda) — Phase 3+
+services-up *profiles="phase3":
+    docker compose --profile {{profiles}} up -d
+
+# Stop background services
+services-down:
+    docker compose down
 
 # ── Rust ──────────────────────────────────────────────────────────────────────
 

@@ -23,14 +23,15 @@
 5. [SDK](#sdk)
 6. [Technology Stack](#technology-stack)
 7. [Self-Hosting](#self-hosting)
-8. [Feasibility Assessment](#feasibility-assessment)
+8. [Development Setup](#development-setup)
+9. [Feasibility Assessment](#feasibility-assessment)
    - [What Is Technically Sound](#what-is-technically-sound)
    - [What Is Technically Novel and Hard](#what-is-technically-novel-and-hard)
    - [Why Flutter as the Universal UI Layer](#why-flutter-as-the-universal-ui-layer)
    - [Risk Register](#risk-register)
    - [Competitive Landscape](#competitive-landscape)
    - [Recommended Phasing](#recommended-phasing)
-9. [Conclusion](#conclusion)
+10. [Conclusion](#conclusion)
 
 ---
 
@@ -408,6 +409,53 @@ Liquid is designed to run without any external subscription:
 - VCS remotes are standard Jujutsu remotes (SSH, HTTP)
 - User management is local or federated (OIDC-compatible)
 - No telemetry by default
+
+---
+
+## Development Setup
+
+### Prerequisites
+
+| Tool | Version | Install |
+|---|---|---|
+| Rust | stable | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| Flutter | stable channel | [flutter.dev/docs/get-started](https://flutter.dev/docs/get-started) |
+| `just` | latest | `cargo install just` |
+| `lefthook` | latest | `npm install -g @evilmartians/lefthook` |
+| Docker | 24+ | [docs.docker.com/get-docker](https://docs.docker.com/get-docker/) |
+| `bats` | latest | [bats-core.readthedocs.io](https://bats-core.readthedocs.io/en/stable/installation.html) |
+
+### First-time setup
+
+```sh
+git clone https://github.com/benediktweber/Liquid.git && cd Liquid
+just install-hooks     # wires git hooks via lefthook
+```
+
+### Daily workflow
+
+```sh
+just test              # run all tests (Rust + Flutter + SDK + CLI bats)
+just lint              # run all linters (clippy + dart analyze)
+just fmt               # auto-fix all formatting
+just check             # full pre-push: lint + test
+just run               # flutter run -d linux  (or macos / windows)
+just cli -- --help     # run the liquid CLI
+just services-up       # start Redis for Phase 3 development
+```
+
+### Key files for contributors
+
+| File | Purpose |
+|---|---|
+| `IMPLEMENTATION_PLAN.md` | Full phased build guide — read before starting any task |
+| `TASKS.md` | Active task queue — pick a task and invoke the `implement` skill |
+| `CLAUDE.md` | Agent instructions — mandatory workflow every session reads |
+| `.claude/skills/implement/SKILL.md` | Step-by-step TDD→CLI→UI→E2E enforcement |
+| `lefthook.yml` | Git hooks — pre-commit linting, commit-msg format, pre-push tests |
+| `justfile` | All dev commands in one place |
+| `docker-compose.yml` | Redis (Phase 3) and Redpanda (Phase 4) services |
+| `docs/adr/` | Architecture Decision Records |
 
 ---
 

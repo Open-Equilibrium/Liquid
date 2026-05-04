@@ -137,30 +137,36 @@ These cannot be overridden by task descriptions or user shortcuts.
 
 ---
 
-## How to Install Git Hooks
+## First-Time Setup (run once after cloning)
 
 ```sh
-git config core.hooksPath .githooks
+npm install -g @evilmartians/lefthook   # if not already installed
+lefthook install                        # wires git hooks from lefthook.yml
 ```
 
-Run this once after cloning. The hooks enforce formatting and linting on every commit and push.
+Hooks run automatically on every commit (`pre-commit`, `commit-msg`) and push
+(`pre-push`). They skip layers whose code does not exist yet.
 
----
+## Daily Commands (`just`)
+
+```sh
+just test          # run all tests (Rust + Flutter + SDK + CLI)
+just lint          # run all linters
+just fmt           # auto-fix all formatting
+just build-all     # flutter build for all 5 platforms
+just run           # flutter run -d linux
+just cli -- --help # run the liquid CLI
+just services-up   # start Redis / Redpanda via Docker Compose (Phase 3+)
+just check         # full pre-push validation (lint + test)
+```
 
 ## Running the Full Stack Locally
 
 ```sh
-# Build Rust core
-cargo build --workspace
-
-# Generate Dart FFI bindings
-cd core && cargo run -p flutter_rust_bridge_codegen -- generate
-
-# Run Flutter app (desktop)
-cd app && flutter run -d linux   # or macos / windows
-
-# Run agent CLI
-cargo run -p liquid-cli -- --help
+just build-rust           # cargo build --workspace
+just generate-bindings    # flutter_rust_bridge codegen
+just run target=linux     # flutter run -d linux  (or macos / windows)
+just cli -- --help        # cargo run -p liquid-cli
 ```
 
 ---

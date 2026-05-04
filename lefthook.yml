@@ -1,0 +1,54 @@
+# Liquid — git hook configuration
+# Docs: https://github.com/evilmartians/lefthook
+# Install: lefthook install  (or: just install-hooks)
+
+pre-commit:
+  parallel: true
+  commands:
+    rust-fmt:
+      glob: "core/**/*.{rs,toml}"
+      run: cargo fmt --manifest-path core/Cargo.toml --check
+
+    rust-clippy:
+      glob: "core/**/*.rs"
+      run: cargo clippy --manifest-path core/Cargo.toml --all-targets -- -D warnings
+
+    dart-fmt-app:
+      glob: "app/**/*.dart"
+      root: "app"
+      run: dart format --output=none --set-exit-if-changed .
+
+    flutter-analyze-app:
+      glob: "app/**/*.dart"
+      root: "app"
+      run: flutter analyze
+
+    dart-fmt-sdk:
+      glob: "sdk/liquid_sdk/**/*.dart"
+      root: "sdk/liquid_sdk"
+      run: dart format --output=none --set-exit-if-changed .
+
+    flutter-analyze-sdk:
+      glob: "sdk/liquid_sdk/**/*.dart"
+      root: "sdk/liquid_sdk"
+      run: flutter analyze
+
+commit-msg:
+  commands:
+    conventional-commits:
+      run: .lefthook/commit-msg/check-conventional.sh {1}
+
+pre-push:
+  parallel: true
+  commands:
+    rust-tests:
+      run: sh -c '[ ! -f core/Cargo.toml ] || cargo test --manifest-path core/Cargo.toml --workspace'
+
+    flutter-tests-app:
+      run: sh -c '[ ! -f app/pubspec.yaml ] || (cd app && flutter test)'
+
+    flutter-tests-sdk:
+      run: sh -c '[ ! -f sdk/liquid_sdk/pubspec.yaml ] || (cd sdk/liquid_sdk && flutter test)'
+
+    cli-tests:
+      run: sh -c '[ ! -d tests/cli ] || ! command -v bats >/dev/null 2>&1 || bats tests/cli/'

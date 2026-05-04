@@ -1,25 +1,18 @@
 #!/usr/bin/env bash
-# Liquid commit-msg hook — enforces Conventional Commits format
-# Receives the path to the commit message file as $1
-
+# Conventional Commits format check
+# Called by lefthook commit-msg hook with the message file path as $1
 set -euo pipefail
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-NC='\033[0m'
-
-COMMIT_MSG=$(head -1 "$1")
+MSG=$(head -1 "$1")
 PATTERN='^(feat|fix|docs|refactor|test|chore|perf)(\([a-z0-9_-]+\))?: .{1,100}$'
 
-if ! echo "$COMMIT_MSG" | grep -qE "$PATTERN"; then
-  echo -e "${RED}✗${NC} Commit message rejected — does not follow Conventional Commits."
+if ! echo "$MSG" | grep -qE "$PATTERN"; then
+  echo "✗ Commit message rejected — does not follow Conventional Commits."
   echo "  Format:  <type>(<scope>): <summary>"
   echo "  Types:   feat  fix  docs  refactor  test  chore  perf"
   echo "  Scopes:  core vcs auth permissions cache bindings bridge cli app sdk registry ci deps"
   echo "  Example: feat(vcs): implement JujutsuContentStore read and write"
   echo ""
-  echo "  Got: $COMMIT_MSG"
+  echo "  Got: $MSG"
   exit 1
 fi
-
-echo -e "${GREEN}✓${NC} commit message format"
