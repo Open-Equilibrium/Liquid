@@ -186,3 +186,95 @@ fix(permissions): prevent role escalation in assign_role
 test(cli): add bats tests for liquid page write command
 docs(sdk): document Platform Abstraction Contract
 ```
+
+---
+
+## Claude Code Tooling (repo-local)
+
+Claude Code-specific configuration lives under `.claude/` and is checked into
+git so it works identically on cloud Claude Code and local sessions.
+
+### Operating mode
+- Optimize for minimal, correct, tested changes.
+- Prefer small implementation steps with targeted verification.
+- Keep raw logs, large command outputs, screenshots, and traces in
+  `.ai/artifacts/`; summarize only useful findings in chat.
+- Use subagents for noisy test logs, UI validation, and diff review.
+- Use deterministic scripts before asking a model to parse large output.
+- Do not paste long logs or full snapshots into the main thread.
+- Do not commit unless explicitly asked.
+
+### Skills (`.claude/skills/`)
+- `implement` — canonical Liquid TDD workflow (red/green, CLI-before-UI gate,
+  E2E, KPI review). Auto-invokes for implementation tasks.
+- `implement-tdd` — lighter-weight Rust + Flutter/Dart TDD loop.
+- `deliver` — final verification, diff review, PR-ready summary.
+- `review-diff` — structured review of the current git diff.
+
+### Subagents (`.claude/agents/`)
+- `test-triager` (haiku, read-only) — parses noisy cargo/flutter/bats logs.
+- `ui-validator` (sonnet, read-only) — validates Flutter UI via existing
+  widget/integration/golden tooling. Does not add Playwright.
+- `code-reviewer` (sonnet, read-only) — reviews the current diff.
+
+### Rules (`.claude/rules/`)
+Rules are merged into context for matching paths: `testing.md`, `rust.md`
+(Cargo paths), `flutter.md` (Dart/Flutter paths).
+
+### Hooks (`.claude/hooks/`)
+- `filter-test-output.sh` — manual helper. Pipe noisy output through it:
+  ```sh
+  cargo test 2>&1 | .claude/hooks/filter-test-output.sh
+  flutter test 2>&1 | .claude/hooks/filter-test-output.sh
+  ```
+  Stores raw logs under `.ai/artifacts/logs/` and prints a compact summary.
+- `save-artifacts.sh` — wired as a `PostToolUse` hook on `Edit|Write` in
+  `.claude/settings.json`. Snapshots `git status` and `git diff --stat`
+  to `.ai/artifacts/diffs/`.
+
+### Project commands quick reference
+
+**Rust** (workspace at `core/Cargo.toml`):
+
+| Action | Command |
+|---|---|
+| Setup | `lefthook install` (or `just install-hooks`) |
+| Check | `cargo check --manifest-path core/Cargo.toml --workspace` |
+| Test (all) | `just test-rust` |
+| Test (focused) | `cargo test -p <crate> --manifest-path core/Cargo.toml <test_name>` |
+| Format | `just fmt-rust` |
+| Lint / clippy | `just lint-rust` |
+| Build | `just build-rust` |
+
+**Flutter/Dart** (`app/`, `sdk/liquid_sdk/`, `apps/*` — created incrementally):
+
+| Action | Command |
+|---|---|
+| Get deps | `flutter pub get` (per package) |
+| Analyze | `just lint-app` / `just lint-sdk` |
+| Test (all) | `just test-app` / `just test-sdk` |
+| Test (focused) | `cd app && flutter test <path>` |
+| Integration | `cd app && flutter test integration_test/` |
+| Format | `just fmt-app` / `just fmt-sdk` |
+| Build | `just build-app target=<linux\|macos\|windows\|ios\|appbundle>` |
+
+**CLI bats**: `just test-cli` (or `bats tests/cli/`).
+
+**Combined**: `just test`, `just lint`, `just fmt`, `just check`.
+
+### Delivery expectations
+Before delivery:
+- run the narrowest relevant tests during implementation
+- run `cargo check` / focused `cargo test` for Rust changes
+- run `flutter analyze` / focused `flutter test` for Dart changes (when the
+  package exists)
+- run `bats tests/cli/` for CLI changes
+- review the git diff (use the `code-reviewer` subagent for non-trivial diffs)
+- summarize changed files, test evidence, and risks
+
+### Cloud notes
+- Flutter UI validation is limited in cloud sessions when no
+  emulator/simulator/browser is available — fall back to widget-level tests.
+- Playwright MCP and Playwright CLI are not configured. Do not add them
+  unless the repo gains real browser e2e tooling.
+- No global MCP servers are configured beyond the GitHub integration.

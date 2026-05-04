@@ -1,0 +1,10 @@
+# Local Claude Code artifacts: logs, screenshots, diff snapshots.
+# Keep directories tracked but ignore captured contents.
+*
+!.gitignore
+!logs/
+!ui/
+!diffs/
+!logs/.gitkeep
+!ui/.gitkeep
+!diffs/.gitkeep
