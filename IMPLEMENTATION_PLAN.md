@@ -1278,6 +1278,11 @@ before removing the old one.
 
 ### Rust
 
+- **Toolchain pin:** the Rust toolchain is fixed in `core/rust-toolchain.toml`
+  (currently `1.94.1`, profile `minimal`, components `rustfmt clippy`). CI
+  installs the same version via `dtolnay/rust-toolchain@master` with
+  `toolchain: 1.94.1`. Bump both files together — never let CI drift to
+  "stable".
 - **Unit tests** (`#[test]` inside each crate): test pure logic, types, and
   in-memory implementations. Run with `cargo test -p <crate>`.
 - **Integration tests** (`core/tests/`): cross-crate scenarios using real
@@ -1286,6 +1291,12 @@ before removing the old one.
   (`InMemoryContentStore`, `InProcessCache`, `InMemoryPermissionIndex`).
   These are first-class code, not test scaffolding.
 - Coverage target: ≥ 80% line coverage on all crates except `liquid-cli`.
+- **Reproduce CI locally** before pushing:
+  ```sh
+  cargo fmt --all --check
+  cargo clippy --workspace --all-targets --locked -- -D warnings
+  cargo test --workspace --locked
+  ```
 
 ### Dart / Flutter
 

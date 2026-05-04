@@ -21,11 +21,18 @@ Prepare a completed task for handoff.
 ## Verification preference
 
 For Rust changes, prefer:
-- focused `cargo test -p <crate> --manifest-path core/Cargo.toml`
+- focused `cargo test -p <crate> --manifest-path core/Cargo.toml <test_name>`
 - `cargo check --manifest-path core/Cargo.toml`
-- `cargo clippy --manifest-path core/Cargo.toml --all-targets -- -D warnings`
-- `cargo fmt --manifest-path core/Cargo.toml --check`
+- `cargo clippy --manifest-path core/Cargo.toml --all-targets --locked -- -D warnings`
+- `cargo fmt --manifest-path core/Cargo.toml --all --check`
 - or `just lint-rust && just test-rust`
+
+To exactly reproduce CI before pushing:
+```sh
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+```
 
 For Flutter/Dart changes (when the package exists), prefer:
 - `flutter analyze` / `dart analyze`

@@ -25,7 +25,7 @@ jobs:
       apps: ${{ steps.check.outputs.apps }}
       cli: ${{ steps.check.outputs.cli }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - id: check
         shell: bash
@@ -58,12 +58,19 @@ jobs:
       run:
         working-directory: core
 
-    steps:
-      - uses: actions/checkout@v4
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_NET_RETRY: "10"
+      CARGO_HTTP_TIMEOUT: "120"
+      RUST_BACKTRACE: "1"
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain (pinned via core/rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: 1.94.1
           components: rustfmt, clippy
 
       - name: Cache cargo registry
@@ -72,27 +79,28 @@ jobs:
           workspaces: core
 
       - name: Check formatting
-        run: cargo fmt --check
+        run: cargo fmt --all --check
 
       - name: Clippy (deny warnings)
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Tests
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
 
       - name: Coverage (ubuntu only)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          cargo install cargo-tarpaulin --locked
-          cargo tarpaulin --workspace --out Xml --output-dir ../coverage/rust/
+          cargo install cargo-tarpaulin --locked --version ^0.31
+          cargo tarpaulin --workspace --out Xml --output-dir ../coverage/rust/ --skip-clean
 
       - name: Upload Rust coverage
         if: matrix.os == 'ubuntu-latest'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: coverage/rust/cobertura.xml
           flags: rust
           token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   # ── Dart / Flutter (SDK) ──────────────────────────────────────────────────────
   sdk:
@@ -105,7 +113,7 @@ jobs:
         working-directory: sdk/liquid_sdk
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -126,11 +134,12 @@ jobs:
         run: flutter test --coverage
 
       - name: Upload SDK coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: sdk/liquid_sdk/coverage/lcov.info
           flags: sdk
           token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   # ── Flutter app ────────────────────────────────────────────────────────────────
   app:
@@ -157,7 +166,7 @@ jobs:
         working-directory: app
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -192,11 +201,12 @@ jobs:
 
       - name: Upload app coverage
         if: matrix.target == 'linux'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: app/coverage/lcov.info
           flags: app
           token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
       - name: Build (release)
         run: |
@@ -224,7 +234,7 @@ jobs:
         working-directory: apps/${{ matrix.app }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -252,12 +262,18 @@ jobs:
     needs: detect
     if: needs.detect.outputs.cli == 'true'
     runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_NET_RETRY: "10"
+      CARGO_HTTP_TIMEOUT: "120"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain (pinned)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.94.1
 
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
@@ -265,7 +281,7 @@ jobs:
           workspaces: core
 
       - name: Build liquid CLI
-        run: cargo build -p liquid-cli --manifest-path core/Cargo.toml
+        run: cargo build -p liquid-cli --manifest-path core/Cargo.toml --locked
 
       - name: Install bats + helpers
         run: |

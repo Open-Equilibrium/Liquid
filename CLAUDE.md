@@ -205,9 +205,9 @@ git so it works identically on cloud Claude Code and local sessions.
 - Do not commit unless explicitly asked.
 
 ### Skills (`.claude/skills/`)
-- `implement` — canonical Liquid TDD workflow (red/green, CLI-before-UI gate,
-  E2E, KPI review). Auto-invokes for implementation tasks.
-- `implement-tdd` — lighter-weight Rust + Flutter/Dart TDD loop.
+- `implement` — **the** canonical Liquid TDD workflow (red/green, CLI-before-UI
+  gate, E2E, project Absolute Rules review, doc update). Auto-invokes at the
+  start of every implementation task. Hard gates between every step.
 - `deliver` — final verification, diff review, PR-ready summary.
 - `review-diff` — structured review of the current git diff.
 
@@ -222,19 +222,35 @@ Rules are merged into context for matching paths: `testing.md`, `rust.md`
 (Cargo paths), `flutter.md` (Dart/Flutter paths).
 
 ### Hooks (`.claude/hooks/`)
+- `session-start.sh` — `SessionStart` hook. Logs toolchain versions, branch,
+  HEAD, and best-effort `cargo fetch --locked` to warm the registry. Output
+  goes to `.ai/artifacts/logs/session-start-*.log`; only a one-line greeting
+  reaches the chat.
+- `save-artifacts.sh` — `PostToolUse` hook on `Edit|Write`. Snapshots
+  `git status` and `git diff --stat` to `.ai/artifacts/diffs/`.
 - `filter-test-output.sh` — manual helper. Pipe noisy output through it:
   ```sh
   cargo test 2>&1 | .claude/hooks/filter-test-output.sh
   flutter test 2>&1 | .claude/hooks/filter-test-output.sh
+  bats tests/cli/   2>&1 | .claude/hooks/filter-test-output.sh
   ```
   Stores raw logs under `.ai/artifacts/logs/` and prints a compact summary.
-- `save-artifacts.sh` — wired as a `PostToolUse` hook on `Edit|Write` in
-  `.claude/settings.json`. Snapshots `git status` and `git diff --stat`
-  to `.ai/artifacts/diffs/`.
+
+### Settings (`.claude/settings.json`)
+- `permissions.allow`: pre-approves common read-only commands (`cargo
+  check/test/clippy/fmt`, `flutter analyze/test/pub get`, `dart analyze`,
+  `just lint*/test*/fmt*/check`, `bats tests/cli/*`, `git status/diff/log`,
+  `rg`/`grep`/`jq`, the project's own hook scripts) so routine work runs
+  without permission prompts.
+- `permissions.deny`: blocks reads of secrets (`.env`, `secrets/**`,
+  Google/Firebase service files, keystores, `*.p12`) and destructive shell
+  commands (`rm -rf`, `curl|sh`, `git push --force/-f`, `git reset --hard`,
+  `git clean -f`, hook bypass via `--no-verify`).
 
 ### Project commands quick reference
 
-**Rust** (workspace at `core/Cargo.toml`):
+**Rust** (workspace at `core/Cargo.toml`, toolchain pinned in
+`core/rust-toolchain.toml`):
 
 | Action | Command |
 |---|---|
@@ -245,6 +261,7 @@ Rules are merged into context for matching paths: `testing.md`, `rust.md`
 | Format | `just fmt-rust` |
 | Lint / clippy | `just lint-rust` |
 | Build | `just build-rust` |
+| Reproduce CI | `cargo fmt --all --check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked` |
 
 **Flutter/Dart** (`app/`, `sdk/liquid_sdk/`, `apps/*` — created incrementally):
 
@@ -278,3 +295,6 @@ Before delivery:
 - Playwright MCP and Playwright CLI are not configured. Do not add them
   unless the repo gains real browser e2e tooling.
 - No global MCP servers are configured beyond the GitHub integration.
+- The Rust toolchain is pinned to `1.94.1` in `core/rust-toolchain.toml`
+  *and* in `.github/workflows/ci.yml` (`dtolnay/rust-toolchain@master` with
+  `toolchain: 1.94.1`). Bump both together; do not let CI drift to "stable".

@@ -15,12 +15,16 @@
 
 ## Rust-specific testing
 
+- Toolchain is pinned in `core/rust-toolchain.toml` (currently `1.94.1`).
+  CI uses the same version via `dtolnay/rust-toolchain@master` with
+  `toolchain: 1.94.1`. Bump both together.
 - Prefer `cargo test -p <crate> --manifest-path core/Cargo.toml <test_name>` for focused tests.
 - Use `cargo check --manifest-path core/Cargo.toml` before broad test runs when type errors are likely.
-- Use `cargo clippy --manifest-path core/Cargo.toml --all-targets -- -D warnings` for quality checks when feasible.
+- Use `cargo clippy --manifest-path core/Cargo.toml --workspace --all-targets --locked -- -D warnings` for quality checks (matches CI).
 - Workspace lints already deny `unsafe_code` and warn on `unwrap`/`expect`/`panic`/`todo`/`unimplemented` (see `core/Cargo.toml`). Do not add `unwrap()`/`expect()` outside `#[cfg(test)]` — see `CLAUDE.md` Absolute Rules.
 - Preserve existing feature flags and the `core/` workspace layout.
-- Project shortcut: `just test-rust`, `just lint-rust`, `just fmt-rust`.
+- Project shortcuts: `just test-rust`, `just lint-rust`, `just fmt-rust`.
+- Reproduce CI exactly: `cargo fmt --all --check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked`.
 
 ## Flutter/Dart-specific testing
 

@@ -9,10 +9,11 @@ paths:
 # Rust Rules
 
 - Prefer small, type-driven changes.
-- Run `cargo fmt --manifest-path core/Cargo.toml` (or `just fmt-rust`).
+- Run `cargo fmt --manifest-path core/Cargo.toml --all` (or `just fmt-rust`).
 - Run focused `cargo test -p <crate> --manifest-path core/Cargo.toml <test_name>` where possible.
 - Use `cargo check --manifest-path core/Cargo.toml` to catch type errors early.
-- Use `cargo clippy --manifest-path core/Cargo.toml --all-targets -- -D warnings` for non-trivial changes.
+- Use `cargo clippy --manifest-path core/Cargo.toml --workspace --all-targets --locked -- -D warnings` for non-trivial changes (matches CI).
+- Toolchain is pinned in `core/rust-toolchain.toml` (currently `1.94.1`). CI pins to the same version. Do not bump one without the other.
 - Preserve public API compatibility of `liquid-core`, `liquid-vcs`, `liquid-auth`,
   `liquid-permissions`, `liquid-cache`, `liquid-bindings`, `liquid-sdk-bridge`,
   and `liquid-cli` unless explicitly asked.
