@@ -11,10 +11,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── Detect which layers are present ──────────────────────────────────────────
+  # GitHub Actions does not allow `hashFiles()` in job-level `if:` expressions,
+  # so we run a single detect job first and gate every other job on its outputs.
+  # Each output is a literal "true" / "false" string.
+  detect:
+    name: Detect layers
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.check.outputs.rust }}
+      sdk: ${{ steps.check.outputs.sdk }}
+      app: ${{ steps.check.outputs.app }}
+      apps: ${{ steps.check.outputs.apps }}
+      cli: ${{ steps.check.outputs.cli }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          exists() { [ -e "$1" ] && echo "true" || echo "false"; }
+          {
+            echo "rust=$(exists core/Cargo.toml)"
+            echo "sdk=$(exists sdk/liquid_sdk/pubspec.yaml)"
+            echo "app=$(exists app/pubspec.yaml)"
+            echo "apps=$(exists apps/text_editor/pubspec.yaml)"
+            if compgen -G "tests/cli/*" > /dev/null; then
+              echo "cli=true"
+            else
+              echo "cli=false"
+            fi
+          } >> "$GITHUB_OUTPUT"
+
   # ── Rust ─────────────────────────────────────────────────────────────────────
   rust:
     name: Rust (${{ matrix.os }})
-    if: hashFiles('core/Cargo.toml') != ''
+    needs: detect
+    if: needs.detect.outputs.rust == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -63,7 +97,8 @@ jobs:
   # ── Dart / Flutter (SDK) ──────────────────────────────────────────────────────
   sdk:
     name: Dart SDK
-    if: hashFiles('sdk/liquid_sdk/pubspec.yaml') != ''
+    needs: detect
+    if: needs.detect.outputs.sdk == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -100,7 +135,8 @@ jobs:
   # ── Flutter app ────────────────────────────────────────────────────────────────
   app:
     name: Flutter app (${{ matrix.target }})
-    if: hashFiles('app/pubspec.yaml') != ''
+    needs: detect
+    if: needs.detect.outputs.app == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -176,7 +212,8 @@ jobs:
   # ── Reference apps — enforce Platform Abstraction Contract (ADR-008) ──────────
   apps-platform-check:
     name: App platform check (${{ matrix.app }})
-    if: hashFiles('apps/text_editor/pubspec.yaml') != ''
+    needs: detect
+    if: needs.detect.outputs.apps == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -212,7 +249,8 @@ jobs:
   # ── CLI integration tests ─────────────────────────────────────────────────────
   cli:
     name: CLI bats tests
-    if: hashFiles('tests/cli/**') != ''
+    needs: detect
+    if: needs.detect.outputs.cli == 'true'
     runs-on: ubuntu-latest
 
     steps:

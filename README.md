@@ -428,7 +428,7 @@ Liquid is designed to run without any external subscription:
 ### First-time setup
 
 ```sh
-git clone https://github.com/benediktweber/Liquid.git && cd Liquid
+git clone https://github.com/open-equilibrium/liquid.git && cd liquid
 just install-hooks     # wires git hooks via lefthook
 ```
 
