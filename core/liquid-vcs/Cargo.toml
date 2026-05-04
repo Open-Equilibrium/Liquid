@@ -1,6 +1,6 @@
 [package]
 name = "liquid-vcs"
-description = "Liquid: Jujutsu-backed content store. Implements ContentStore."
+description = "Liquid: ContentStore trait + InMemoryContentStore. Jujutsu-backed implementation lands in TASK-003."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,3 +12,8 @@ workspace = true
 
 [dependencies]
 liquid-core.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

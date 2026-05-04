@@ -187,18 +187,27 @@ discussion or check `docs/adr/` for the rationale.
 
 ### 4.1 ContentStore (`liquid-vcs`)
 
+All methods return [`liquid_core::Result<T>`][result] (i.e. `Result<T,
+LiquidError>`). The earlier draft specified a domain-specific `StoreError`,
+but the workspace-wide policy in `CLAUDE.md` is that every public function
+returns `Result<_, LiquidError>` — so the `liquid-vcs` crate normalises to
+that single error type and does not introduce a parallel hierarchy.
+
+[result]: https://github.com/open-equilibrium/liquid/blob/main/core/liquid-core/src/error.rs
+
 ```rust
 #[async_trait]
 pub trait ContentStore: Send + Sync {
     /// Read the current content of `path` in `workspace`.
+    /// `LiquidError::NotFound` if the workspace or path does not exist.
     async fn read(
         &self,
         workspace: WorkspaceId,
         path: &StorePath,
-    ) -> Result<Bytes, StoreError>;
+    ) -> Result<Bytes>;
 
-    /// Atomically write `content` to `path`, creating a commit attributed to
-    /// `author` with `message`. Returns the new CommitId.
+    /// Atomically write `content` to `path`, recording an operation
+    /// attributed to `author` with `message`. Returns the new `CommitId`.
     async fn write(
         &self,
         workspace: WorkspaceId,
@@ -206,30 +215,37 @@ pub trait ContentStore: Send + Sync {
         content: Bytes,
         author: PrincipalId,
         message: &str,
-    ) -> Result<CommitId, StoreError>;
+    ) -> Result<CommitId>;
 
-    /// Return the ordered operation log for `workspace` (newest first).
+    /// Return up to `limit` operation log entries for `workspace`,
+    /// newest first.
     async fn operation_log(
         &self,
         workspace: WorkspaceId,
         limit: usize,
-    ) -> Result<Vec<Operation>, StoreError>;
+    ) -> Result<Vec<Operation>>;
 
-    /// Undo the operation identified by `op_id`. Returns the resulting CommitId.
+    /// Invert the operation identified by `op_id`. Returns the new
+    /// `CommitId` for the synthetic commit that captures the inversion.
     async fn undo(
         &self,
         workspace: WorkspaceId,
         op_id: OperationId,
-    ) -> Result<CommitId, StoreError>;
+    ) -> Result<CommitId>;
 
-    /// List children of `path` (directory-style listing).
+    /// List paths beneath `prefix` (directory-style listing).
     async fn list(
         &self,
         workspace: WorkspaceId,
-        path: &StorePath,
-    ) -> Result<Vec<StorePath>, StoreError>;
+        prefix: &StorePath,
+    ) -> Result<Vec<StorePath>>;
 }
 ```
+
+`Operation` is a `liquid-vcs` type carrying `{id, commit, timestamp,
+author, message, kind}`, where `kind` is `Create | Update | Delete | Undo`
+and each variant captures enough state (e.g. `prev: Bytes` on `Update`) to
+invert the operation without consulting the underlying store.
 
 ### 4.2 PermissionIndex (`liquid-permissions`)
 
