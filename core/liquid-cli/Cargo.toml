@@ -1,0 +1,19 @@
+[package]
+name = "liquid-cli"
+description = "Liquid: `liquid` CLI binary for agent interactions."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "liquid"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+liquid-core.workspace = true
+liquid-sdk-bridge.workspace = true

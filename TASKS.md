@@ -10,7 +10,29 @@ Agents: read the task carefully, check the referenced milestone in
 
 ## Active tasks
 
-_None yet — project is in pre-scaffolding phase._
+### [TASK-001] Rust workspace bootstrap + `liquid-core` primitives
+
+**Phase:** 1
+**Milestone:** M1 (IMPLEMENTATION_PLAN.md §5.1)
+**Status:** Done
+
+**What.** Create the `core/` Cargo workspace with stubs for all eight crates
+(`liquid-core`, `liquid-vcs`, `liquid-auth`, `liquid-permissions`,
+`liquid-cache`, `liquid-bindings`, `liquid-sdk-bridge`, `liquid-cli`) and
+fully implement `liquid-core`: ID newtypes, `PrincipalId`, `ContentHash`,
+`StorePath`, `SlotName`, `SlotValue`, `Action`, `Resource`, `TenantConfig`,
+`LiquidError`. Every public function returns `Result<_, LiquidError>`; no
+`unwrap()`/`expect()` outside `#[cfg(test)]`.
+
+**Acceptance criteria.**
+- [x] `cargo test -p liquid-core` is green (26 tests)
+- [x] `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` clean
+- [x] No `unwrap()`/`expect()` outside `#[cfg(test)]`
+- [x] Every ID type has construction, equality, and serde round-trip tests
+- [x] `StorePath` rejects `..`, absolute paths, empty segments
+- [x] `SlotName` rejects malformed names
+- [x] `ContentHash::from_hex` validates length and lowercase-hex
+- [ ] CI's `detect` job picks up `core/Cargo.toml` and runs the rust matrix (verified post-push)
 
 ---
 

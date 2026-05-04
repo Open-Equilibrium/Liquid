@@ -1,0 +1,14 @@
+[package]
+name = "liquid-auth"
+description = "Liquid: identity, OIDC, and session management. Implements IdentityProvider."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+liquid-core.workspace = true

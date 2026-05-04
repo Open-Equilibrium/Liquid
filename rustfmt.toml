@@ -1,6 +1,8 @@
 edition = "2021"
 max_width = 100
-imports_granularity = "Crate"
-group_imports = "StdExternalCrate"
 use_field_init_shorthand = true
 use_try_shorthand = true
+
+# `imports_granularity` and `group_imports` are nightly-only as of rustfmt
+# 1.7. Re-enable them when CI ships a nightly toolchain. Until then, ordering
+# is left to the developer.

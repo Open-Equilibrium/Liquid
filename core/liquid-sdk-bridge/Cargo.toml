@@ -1,0 +1,19 @@
+[package]
+name = "liquid-sdk-bridge"
+description = "Liquid: thin FFI surface (flutter_rust_bridge). Permission check first; no business logic."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+liquid-core.workspace = true
+liquid-vcs.workspace = true
+liquid-auth.workspace = true
+liquid-permissions.workspace = true
+liquid-cache.workspace = true
+liquid-bindings.workspace = true
