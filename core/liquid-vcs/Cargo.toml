@@ -1,6 +1,6 @@
 [package]
 name = "liquid-vcs"
-description = "Liquid: ContentStore trait + InMemoryContentStore. Jujutsu-backed implementation lands in TASK-003."
+description = "Liquid: ContentStore trait + InMemory and Filesystem implementations. jj-lib wrapper deferred (ADR-001)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -14,6 +14,9 @@ workspace = true
 liquid-core.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt"] }

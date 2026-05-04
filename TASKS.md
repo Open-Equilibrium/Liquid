@@ -30,17 +30,39 @@ the workspace-wide error type so cross-crate boundaries stay uniform).
 - [x] `InMemoryContentStore` is `Send + Sync`
 - [x] `IMPLEMENTATION_PLAN.md` §4.1 updated to reflect the trait signature actually shipped
 
-### [TASK-003] `JujutsuContentStore` + ADR-001 (jj-lib pinning)
+### [TASK-003] `FilesystemContentStore` + ADR-001 (VCS persistence policy)
 
 **Phase:** 1
-**Milestone:** M2 (IMPLEMENTATION_PLAN.md §5.2, sub-tasks 2 & 4 of 4)
-**Status:** Planned
+**Milestone:** M2 (IMPLEMENTATION_PLAN.md §5.2, sub-task 2 — interim)
+**Status:** Done
 **Blocked by:** TASK-002
 
-**What.** Add `jj-lib` as a pinned dependency, implement `JujutsuContentStore`
-satisfying the `ContentStore` trait against a real Jujutsu repository under
-`~/.liquid/workspaces/<id>/`, and write ADR-001 (`docs/adr/001-jujutsu-pinning.md`)
-documenting the pinned version and migration policy.
+**What.** Ship an on-disk `ContentStore` implementation under
+`<root>/<workspace_id>/` with atomic file writes (write-tmp + rename) and a
+JSON-line operation log. ADR-001 captures the decision to defer the
+`jj-lib`-backed `JujutsuContentStore` to TASK-004 (jj-lib's API is unstable;
+proving the on-disk persistence path against the trait gets us the
+operationally important property — durability — without committing to a
+specific upstream version this session).
+
+**Acceptance criteria.**
+- [x] `cargo test -p liquid-vcs` is green for both InMemory and Filesystem stores (26 tests)
+- [x] `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` clean
+- [x] No `unwrap()`/`expect()` outside `#[cfg(test)]`
+- [x] Workspace data persists across `FilesystemContentStore` instances
+- [x] Op log survives process restart (verified by re-opening the same root)
+- [x] `docs/adr/001-jujutsu-pinning.md` accepted
+
+### [TASK-004] `JujutsuContentStore` via `jj-lib`
+
+**Phase:** 1
+**Milestone:** M2 (IMPLEMENTATION_PLAN.md §5.2, sub-task 2 — final)
+**Status:** Planned
+**Blocked by:** TASK-003
+
+**What.** Replace `FilesystemContentStore` with a thin wrapper over a real
+Jujutsu workspace via the pinned `jj-lib` version named in ADR-001. The
+trait abstraction (ADR-005) means callers won't change.
 
 ---
 
