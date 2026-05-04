@@ -1296,16 +1296,23 @@ before removing the old one.
 
 ### CI pipeline
 
-Defined in `.github/workflows/ci.yml`. Jobs skip gracefully when their code
-layer does not exist yet (`hashFiles()` guards). Locally, use `just check`
-(runs `just lint` + `just test`) to replicate the full CI suite before pushing.
+Defined in `.github/workflows/ci.yml`. A leading `detect` job inspects the
+working tree for each layer's marker file (`core/Cargo.toml`,
+`sdk/liquid_sdk/pubspec.yaml`, `app/pubspec.yaml`,
+`apps/text_editor/pubspec.yaml`, `tests/cli/*`) and exposes one boolean
+output per layer; every other job declares `needs: detect` and gates on the
+matching output. Layers whose code does not exist yet show as skipped
+rather than failing — `hashFiles()` is not used at job level because
+GitHub Actions rejects it there. Locally, use `just check` (runs `just
+lint` + `just test`) to replicate the full CI suite before pushing.
 
 ```
-rust            — fmt + clippy + tests  (Linux / Windows / macOS)
-sdk             — dart format + analyze + flutter test --coverage
-app             — dart format + analyze + flutter test --coverage + flutter build <5 targets>
+detect              — outputs rust|sdk|app|apps|cli = "true"|"false"
+rust                — fmt + clippy + tests  (Linux / Windows / macOS)
+sdk                 — dart format + analyze + flutter test --coverage
+app                 — dart format + analyze + flutter test --coverage + flutter build <5 targets>
 apps-platform-check — flutter analyze + linux build per reference app (ADR-008)
-cli             — bats tests/cli/
+cli                 — bats tests/cli/
 ```
 
 Coverage reports (tarpaulin for Rust, lcov for Flutter) are uploaded to Codecov
