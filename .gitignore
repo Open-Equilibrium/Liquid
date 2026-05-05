@@ -1,0 +1,89 @@
+# Liquid root .gitignore
+#
+# Per-tree .gitignore files (e.g. core/.gitignore, app/.gitignore) cover
+# patterns specific to that subtree. This file covers patterns that
+# apply repo-wide.
+
+# ─── Editor / IDE ───────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ─── OS ─────────────────────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ─── Local environment / secrets (CLAUDE.md deny rules also block reads) ─
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.keystore
+*.jks
+*.p12
+**/google-services.json
+**/GoogleService-Info.plist
+
+# ─── Rust ───────────────────────────────────────────────────────────────
+# Build artifacts (also covered by core/.gitignore for the workspace).
+**/target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Crash dumps from Rust panics
+**/crash.log
+
+# ─── Flutter / Dart ─────────────────────────────────────────────────────
+# Generated build output
+**/build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+
+# Flutter IDE files
+**/.flutter-plugins
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/macos/Flutter/ephemeral
+**/android/.gradle/
+**/android/local.properties
+**/android/captures/
+
+# flutter_rust_bridge generated files (committed under app/lib/bridge/)
+# are intentionally NOT ignored.
+
+# ─── Lockfile policy ────────────────────────────────────────────────────
+# Cargo.lock IS tracked (workspace level) — we ship reproducible builds.
+# pubspec.lock IS tracked once Flutter packages exist.
+
+# ─── AI / agent artifacts ───────────────────────────────────────────────
+# .claude/ is the repo-local AI agent config — it IS tracked.
+# .ai/ holds run-time agent artefacts (raw logs, diffs, screenshots) —
+# these are session-local and should not be committed.
+.ai/
+
+# Per-developer Claude Code settings overlay — local only.
+.claude/settings.local.json
+
+# ─── Coverage / profiling ───────────────────────────────────────────────
+*.profraw
+*.profdata
+coverage/
+lcov.info
+
+# ─── Misc ───────────────────────────────────────────────────────────────
+# Temporary files written by editors or test fixtures
+/tmp/
+*.bak
+*.tmp
+*.orig
+*.rej

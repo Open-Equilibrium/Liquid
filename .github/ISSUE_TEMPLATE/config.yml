@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security issue
+    url: https://github.com/open-equilibrium/liquid/security/advisories/new
+    about: Please report security issues privately via GitHub Security Advisories — do not file a public issue.
+  - name: Question or discussion
+    url: https://github.com/open-equilibrium/liquid/discussions
+    about: For open-ended questions or design discussion, please open a GitHub Discussion rather than an issue.
