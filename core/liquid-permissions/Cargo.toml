@@ -12,3 +12,10 @@ workspace = true
 
 [dependencies]
 liquid-core.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+liquid-auth.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }

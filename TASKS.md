@@ -64,9 +64,72 @@ specific upstream version this session).
 Jujutsu workspace via the pinned `jj-lib` version named in ADR-001. The
 trait abstraction (ADR-005) means callers won't change.
 
+### [TASK-007] Disk-backed `PermissionIndex`
+
+**Phase:** 1
+**Milestone:** M3 (IMPLEMENTATION_PLAN.md §5.3, last bullet)
+**Status:** Planned
+**Blocked by:** TASK-005
+
+**What.** Ship a TOML-backed implementation of `PermissionIndex` that
+persists role bindings to `<root>/workspaces/<id>/permissions.toml` (per
+§9). `InMemoryPermissionIndex` from TASK-005 stays as the test/dev
+backend. Application code depends only on the trait, so the swap is
+transparent.
+
 ---
 
 ## Done tasks
+
+### [TASK-005] `liquid-permissions` trait + `InMemoryPermissionIndex` + `require_permission!`
+
+**Phase:** 1
+**Milestone:** M3 (IMPLEMENTATION_PLAN.md §5.3, sub-tasks 2–4 of 4)
+**Status:** Done
+
+**What.** Define `PermissionIndex` (per §4.2 — updated to reflect Phase-1
+scope: `BuiltInRole` enum instead of `RoleId`; `grant` deferred to Phase 3
+along with custom roles). Ship `InMemoryPermissionIndex`, the
+hard-coded `BuiltInRole` permission matrix
+(`WorkspaceOwner | WorkspaceMember | AppViewer | AppEditor | Agent`), and
+the `require_permission!` macro that gates every bridge / CLI callsite.
+
+**Acceptance criteria.**
+- [x] `cargo test -p liquid-permissions` is green (12 unit tests + the
+      M3 plan-level end-to-end test that wires `liquid-auth` into the
+      flow)
+- [x] `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings`
+      clean
+- [x] No `unwrap()`/`expect()` outside `#[cfg(test)]`
+- [x] Plan-level success criterion proven: AppViewer cannot write,
+      AppEditor can, WorkspaceOwner can do both
+- [x] §4.2 updated to reflect the trait shape actually shipped
+
+### [TASK-006] `liquid-auth::LocalIdentityProvider`
+
+**Phase:** 1
+**Milestone:** M3 (IMPLEMENTATION_PLAN.md §5.3, sub-task 1 of 4)
+**Status:** Done
+
+**What.** Define `IdentityProvider` (per §4.5 — errors normalised to
+`LiquidError`, `workspace_id` removed from token format) and ship
+`LocalIdentityProvider`: TOML-backed users + agents (`users.toml`,
+`agents.toml` under a configurable root), Argon2id password hashing,
+HMAC-SHA256 session tokens of the form `principal . expires_unix .
+hmac_hex`. `register_user` / `authenticate_user` live as inherent
+helpers — they are local-only and Phase 3's OIDC backend will replace
+them with a browser-redirect flow.
+
+**Acceptance criteria.**
+- [x] `cargo test -p liquid-auth` is green (13 integration tests
+      including round-trip-across-restart and tampered/expired token
+      rejection)
+- [x] `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings`
+      clean
+- [x] No `unwrap()`/`expect()` outside `#[cfg(test)]`
+- [x] Tokens reject tampering, wrong signing key, expiry, malformed input
+- [x] Users and agents persist across provider restarts
+- [x] §4.5 updated to reflect the trait shape actually shipped
 
 ### [TASK-001] Rust workspace bootstrap + `liquid-core` primitives
 

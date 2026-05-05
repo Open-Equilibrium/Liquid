@@ -12,3 +12,15 @@ workspace = true
 
 [dependencies]
 liquid-core.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+argon2 = { version = "0.5", features = ["std"] }
+hmac = "0.12"
+sha2 = "0.10"
+toml = "0.8"
+hex = "0.4"
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }
