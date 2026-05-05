@@ -1,0 +1,21 @@
+Liquid
+Copyright 2026 The Liquid Project Contributors
+
+This product includes software developed by the Liquid Project Contributors
+and published under the Apache License, Version 2.0 (see LICENSE).
+
+Liquid links against (or includes, where indicated) the following third-party
+crates and packages, each under its own license. Source URLs and exact
+license text are recorded in the crate metadata of every dependency in
+`core/Cargo.lock`.
+
+  - argon2, hmac, sha2, password-hash (RustCrypto, MIT OR Apache-2.0)
+  - tokio, async-trait, bytes, serde, serde_json, thiserror, uuid (MIT OR Apache-2.0)
+  - toml, hex, tempfile (MIT OR Apache-2.0)
+
+When TASK-004 lands, this NOTICE will additionally cover:
+
+  - jj-lib (Jujutsu) — Apache-2.0
+
+Run `cargo license --manifest-path core/Cargo.toml` for the authoritative
+list of dependency licenses at any point in time.
