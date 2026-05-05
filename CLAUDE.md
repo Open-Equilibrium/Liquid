@@ -21,6 +21,25 @@ working on this project.
 | `docs/sdk-guide/` | Developer-facing documentation |
 | `.githooks/` | Pre-commit and pre-push hooks — install with `git config core.hooksPath .githooks` |
 | `.github/workflows/` | CI pipeline |
+| `.github/ISSUE_TEMPLATE/` | Bug, feature, and task issue templates |
+| `.github/PULL_REQUEST_TEMPLATE.md` | PR template (test plan + Absolute-Rules checklist) |
+| `.claude/` | Repo-local agent config (skills, subagents, hooks, rules) |
+
+## Open-source surface (top-level files)
+
+| File | Purpose |
+|---|---|
+| `README.md` | OSS-standard project entry point — vision, status, quickstart, doc map |
+| `developer_info.md` | Architecture, design rationale, feasibility, phasing — moved out of README |
+| `IMPLEMENTATION_PLAN.md` | Authoritative milestone-by-milestone build guide |
+| `TASKS.md` | Active task queue |
+| `CONTRIBUTING.md` | Contributor workflow, prereqs, daily commands, PR rules |
+| `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1 (adopted by reference) |
+| `SECURITY.md` | Vulnerability disclosure (GitHub Security Advisories) |
+| `CHANGELOG.md` | Keep-a-Changelog (driven by Conventional Commits via `cargo-release`) |
+| `LICENSE` | Apache-2.0 (matches the workspace declaration in `core/Cargo.toml`) |
+| `NOTICE` | Third-party attribution per Apache convention |
+| `CLAUDE.md` | **This file** — agent rules; takes precedence over external defaults |
 
 ---
 
@@ -115,7 +134,13 @@ Then manually review your diff for:
 - If a new SDK API was added: update `IMPLEMENTATION_PLAN.md §11` and `docs/sdk-guide/`.
 - If a design decision was made that contradicts or extends an existing ADR: create a new ADR in
   `docs/adr/NNN-title.md` using the template at `docs/adr/TEMPLATE.md`.
-- If the README concept changed: update `README.md`.
+- If user-visible behaviour changed: add an entry under `## [Unreleased]` in `CHANGELOG.md`.
+- If a milestone moved from Planned → Done: tick it in `README.md`'s status table and move the
+  task entry in `TASKS.md` to the Done section.
+- If the project concept (vision, scope, audience) changed: update `README.md`.
+- If architecture/design rationale changed: update `developer_info.md`.
+- After all of the above, **invoke the `sync-docs` skill** to audit the whole doc set for drift
+  before committing.
 
 ---
 
@@ -210,6 +235,10 @@ git so it works identically on cloud Claude Code and local sessions.
   start of every implementation task. Hard gates between every step.
 - `deliver` — final verification, diff review, PR-ready summary.
 - `review-diff` — structured review of the current git diff.
+- `sync-docs` — audit `README.md`, `developer_info.md`, `IMPLEMENTATION_PLAN.md`,
+  `TASKS.md`, `CHANGELOG.md`, and `docs/adr/` for drift against the current code.
+  Invoke after `implement` Step 7 (or before any PR) so the whole doc set stays
+  consistent.
 
 ### Subagents (`.claude/agents/`)
 - `test-triager` (haiku, read-only) — parses noisy cargo/flutter/bats logs.
