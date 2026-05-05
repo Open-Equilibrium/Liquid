@@ -429,42 +429,87 @@ write via CLI. No app marketplace, no extensions, no multi-workspace UI.
 
 ### 5.2 Milestone 2 — VCS layer (week 3–6)
 
-- [ ] Add `jj-lib` as a dependency in `liquid-vcs`
-- [ ] Implement `JujutsuContentStore` that satisfies the `ContentStore` trait:
-  - One Jujutsu repo per workspace, stored under `~/.liquid/workspaces/<id>/`
-  - `read` → resolves the working-copy commit, reads the file tree
-  - `write` → creates a new commit on the current branch with the given author
-  - `operation_log` → wraps `jj op log`
-  - `undo` → wraps `jj op undo`
-  - `list` → walks the tree at the given path
-- [ ] Implement `InMemoryContentStore` for tests (no Jujutsu dependency)
-- [ ] Pin the `jj-lib` version in `Cargo.lock`; document the pinned version in
-  `docs/adr/001-jujutsu-pinning.md`
+ADR-001 splits this milestone into two tasks: ship a durable backend
+*now* (filesystem) and defer the `jj-lib` integration to its own task.
+Both implementations live behind the same `ContentStore` trait, so
+application code does not change when the swap happens.
 
-**Success criterion:** Integration test creates a workspace, writes three files,
-reads them back, undoes the last write, and verifies the file is gone.
+- [x] Implement `InMemoryContentStore` (TASK-002) — test/dev backend,
+      no persistence. Satisfies the trait without any Jujutsu dependency.
+- [x] Implement `FilesystemContentStore` (TASK-003) — durable on-disk
+      backend used in Phase 1. Layout per ADR-001:
+      ```
+      <root>/<workspace_id>/
+        files/<store_path>     # raw bytes; tmp-then-rename atomic write
+        op_log.jsonl           # newline-delimited Operation JSON
+      ```
+- [x] Accept ADR-001 documenting the deferral.
+- [ ] Implement `JujutsuContentStore` (TASK-004) — thin wrapper over a
+      pinned `jj-lib` version, satisfying the same trait. The
+      integration tests written against `FilesystemContentStore` apply
+      unchanged to the new impl. Pinning policy: exact patch in
+      `Cargo.lock`; Renovate `jj-lib` rule blocks auto-upgrade.
+
+**Success criterion:** Integration test creates a workspace, writes
+three files, reads them back, undoes the last write, and verifies the
+file is gone — passes against both `FilesystemContentStore` (today) and
+`JujutsuContentStore` (when TASK-004 lands). On-disk durability is
+proven by re-opening the same root in a fresh process and reading the
+data back.
 
 ---
 
 ### 5.3 Milestone 3 — Auth + permissions (week 5–8)
 
-- [ ] Implement `LocalIdentityProvider` in `liquid-auth`:
-  - Users stored as hashed credentials in `~/.liquid/auth/users.toml`
-  - Agents stored as capability tokens in `~/.liquid/auth/agents.toml`
-  - Token = HMAC-SHA256-signed `{principal_id, workspace_id, expires_at}` blob
-- [ ] Implement `InMemoryPermissionIndex` (stub for phase 1):
-  - HashMap of `(PrincipalId, Action, Resource) → bool`
-  - `check` is a HashMap lookup
-  - `grant` / `assign_role` mutate the map and write through to a TOML file
-- [ ] Implement RBAC role model:
-  - Built-in roles: `WorkspaceOwner | WorkspaceMember | AppViewer | AppEditor | Agent`
-  - Role → permission set is hard-coded in phase 1; configurable in phase 3
-- [ ] Permission check is the **first** thing every `liquid-sdk-bridge` call does —
-  add a `require_permission!` macro that calls `PermissionIndex::check` and
-  returns `Err(LiquidError::Forbidden)` on denial
+The trait shapes here reflect ADR-002 (M3 trait scoping): in-memory
+backends ship now, disk-backed variants are deferred, and the original
+§4.2 / §4.5 drafts are simplified to drop Phase-3-only surface
+(`grant`, `RoleId`, workspace-bound tokens).
 
-**Success criterion:** Unit test proves an agent with `AppViewer` role cannot
-write; an agent with `AppEditor` role can; `WorkspaceOwner` can do both.
+- [x] Implement `LocalIdentityProvider` in `liquid-auth` (TASK-006):
+  - Users stored as hashed credentials in `<root>/users.toml` (Argon2id
+    via the `argon2` crate; never the raw password)
+  - Agents stored in `<root>/agents.toml` with id, name, workspace,
+    authorising principal, and creation time
+  - Atomic writes (tmp-then-rename), same idiom as
+    `FilesystemContentStore`
+  - Session token: `principal . expires_unix . hmac_hex`
+    (HMAC-SHA256, three dot-separated URL-safe-by-construction fields).
+    `principal` is `u:<uuid>` for users, `a:<uuid>` for agents.
+    No `workspace_id` field — see ADR-002.
+  - All auth failure modes collapse to `LiquidError::Forbidden`; never
+    leak which mode failed
+- [x] Implement `InMemoryPermissionIndex` in `liquid-permissions`
+      (TASK-005):
+  - `HashSet<Binding>` where
+    `Binding = { workspace, principal, role, scope }`
+  - `check` is a single pass over the principal's bindings; the
+    role → permission matrix is encoded in `BuiltInRole::permits`
+  - `assign_role` validates that scope-required roles
+    (`AppViewer`/`AppEditor`) carry `Some(Resource)`
+  - `revoke_role` is idempotent
+- [x] Implement RBAC role model (`BuiltInRole`):
+  - Built-in roles:
+    `WorkspaceOwner | WorkspaceMember | AppViewer | AppEditor | Agent`
+  - Role → permission set hard-coded in `BuiltInRole::permits`;
+    runtime-configurable role grants are deferred to Phase 3, when the
+    `grant(role, action, resource)` method returns to the trait
+- [x] Permission check is the **first** thing every `liquid-sdk-bridge`
+      call does — `require_permission!(index, principal, action,
+      resource)` macro calls `PermissionIndex::check` and returns
+      `Err(LiquidError::Forbidden)` on denial. Re-exported from
+      `liquid_permissions`.
+- [ ] Implement disk-backed `PermissionIndex` (TASK-007) — TOML file at
+      `<root>/workspaces/<id>/permissions.toml` per §9. The trait is
+      already in place; this is purely an additional implementation.
+
+**Success criterion (proven in
+`core/liquid-permissions/tests/m3_end_to_end.rs`):** Unit test wires
+`liquid-auth` and `liquid-permissions` together along the path a real
+bridge call would follow (issue token → validate token →
+`require_permission!`) and proves an agent with `AppViewer` role cannot
+write, an agent with `AppEditor` role can, and `WorkspaceOwner` can do
+both.
 
 ---
 
@@ -893,50 +938,113 @@ async, no external dependencies beyond `serde` and `uuid`.
 ---
 
 ### `liquid-vcs`
-**Purpose:** Jujutsu wrapper. Implements `ContentStore`. Owns nothing about
-permissions, auth, or UI.
+**Purpose:** Versioned content store. Owns nothing about permissions,
+auth, or UI. Per ADR-001, ships two `ContentStore` implementations
+behind a single trait.
 
-**Dependencies:** `liquid-core`, `jj-lib` (pinned), `liquid-cache`
+**Dependencies:** `liquid-core`, `async-trait`, `bytes`, `serde`,
+`serde_json`. `jj-lib` (pinned) is added by TASK-004.
 
-**Key implementation notes:**
+**Implementations (Phase 1):**
+
+| Impl | Status | When to use |
+|---|---|---|
+| `InMemoryContentStore` | Shipped (TASK-002) | Tests, dev mode |
+| `FilesystemContentStore` | Shipped (TASK-003) | Default Phase-1 backend; durable |
+| `JujutsuContentStore` | Planned (TASK-004) | Replaces `FilesystemContentStore` once `jj-lib` is pinned |
+
+**`FilesystemContentStore` layout (per ADR-001):**
+
+```
+<root>/<workspace_id>/
+  files/<store_path>     # raw bytes; tmp-then-rename atomic write
+  op_log.jsonl           # append-only newline-delimited Operation JSON
+```
+
+`StorePath` maps directly into the `files/` subtree. Operation log is
+parsed by re-reading the whole file on every `operation_log` / `undo`
+call — fine for Phase 1; Phase 2+ may add an in-memory cache or binary
+log if it becomes a hot path.
+
+**`JujutsuContentStore` notes (TASK-004):**
 - One Jujutsu repo per workspace under `{data_dir}/workspaces/{workspace_id}/`
 - All writes create a commit on the `main` branch with author set to
   `PrincipalId`'s string representation
-- The operation log is exposed as-is from Jujutsu; no additional metadata layer
+- Operation log exposed as-is from Jujutsu; no additional metadata layer
 - `StorePath` maps directly to Jujutsu's file tree
+- `jj-lib` is pinned to an exact patch version; Renovate's `jj-lib`
+  rule blocks auto-upgrade and routes bumps to manual review
 
 ---
 
 ### `liquid-auth`
 **Purpose:** Identity and session management. Implements `IdentityProvider`.
 
-**Dependencies:** `liquid-core`, `argon2`, `hmac`, `sha2`, `toml`
+**Dependencies:** `liquid-core`, `argon2`, `hmac`, `sha2`, `toml`,
+`hex`, `uuid`, `async-trait`, `serde`.
 
-**Key implementation notes:**
-- Phase 1: file-backed user/agent store in TOML; password hashed with Argon2id
-- Phase 3: OIDC provider integration (Google, Microsoft, generic OpenID Connect)
-- Token format: `{principal_id}.{workspace_id}.{expires_unix}.{hmac_hex}` — URL-safe base64 encoded
+**Key implementation notes (Phase 1, per ADR-002):**
+- File-backed user/agent store in TOML at `<root>/users.toml` and
+  `<root>/agents.toml`; atomic writes (tmp-then-rename)
+- Passwords hashed with Argon2id via the `argon2` crate; raw passwords
+  never persisted
+- Token format: `principal . expires_unix . hmac_hex` — three
+  dot-separated, URL-safe-by-construction fields, signed with
+  HMAC-SHA256. `principal` is `u:<uuid>` for users, `a:<uuid>` for
+  agents. The `workspace_id` field from the original draft is dropped:
+  a token is identity, not authority.
+- Auth-failure modes (tampered, expired, unknown signing key, malformed,
+  unknown user, wrong password) all collapse to
+  `LiquidError::Forbidden` — never leak which mode failed
 - Agents are principals with no password, only capability tokens
+- Trait surface is minimal (`validate_token`, `issue_token`,
+  `provision_agent`); local-only helpers (`register_user`,
+  `authenticate_user`) are inherent methods on
+  `LocalIdentityProvider`. Phase 3's OIDC backend will replace the
+  `authenticate_user` flow with a browser redirect + code exchange.
 
 ---
 
 ### `liquid-permissions`
 **Purpose:** RBAC model and permission index. Implements `PermissionIndex`.
 
-**Dependencies:** `liquid-core`, `liquid-auth`
+**Dependencies:** `liquid-core`, `async-trait`, `serde`. (No runtime
+dependency on `liquid-auth`; `PrincipalId` lives in `liquid-core` and
+the M3 end-to-end test in this crate uses `liquid-auth` only as a
+dev-dependency.)
 
-**Built-in roles (phase 1, hard-coded):**
+**Built-in roles (Phase 1, hard-coded in `BuiltInRole::permits` per
+ADR-002):**
 
-| Role | Allowed Actions |
-|---|---|
-| `WorkspaceOwner` | All actions on all resources in workspace |
-| `WorkspaceMember` | Read all; Write own pages and app instances |
-| `AppViewer` | Read a specific app instance |
-| `AppEditor` | Read + Write a specific app instance |
-| `Agent` | Configured per-agent; cannot exceed authorising principal |
+| Role | Allowed Actions | Scope at assignment |
+|---|---|---|
+| `WorkspaceOwner` | All actions on all resources in workspace | `None` |
+| `WorkspaceMember` | Read all; Write/Delete pages, app instances, components; no Admin | `None` |
+| `AppViewer` | Read on the scoped app instance / component | `Some(Resource::AppInstance(_))` |
+| `AppEditor` | Read + Write on the scoped app instance / component | `Some(Resource::AppInstance(_))` |
+| `Agent` | Marker only; grants nothing on its own — agents derive authority from additional role bindings (cannot exceed authorising principal) | either |
 
-**Index storage (phase 1):** TOML file at `{data_dir}/workspaces/{id}/permissions.toml`
-**Index storage (phase 3):** Redis key-value store
+`BuiltInRole::requires_scope()` enforces that `AppViewer` and
+`AppEditor` are assigned with a non-`None` scope; the index returns
+`LiquidError::InvalidInput` otherwise.
+
+**Permission gate.** `require_permission!(index, principal, action,
+resource)` is the canonical macro at every bridge / CLI callsite
+(CLAUDE.md rule 4). It awaits `PermissionIndex::check` and returns
+`Err(LiquidError::Forbidden)` from the enclosing `async fn` on denial.
+
+**Implementations:**
+
+| Impl | Status | When to use |
+|---|---|---|
+| `InMemoryPermissionIndex` | Shipped (TASK-005) | Tests, Phase-1 dev mode |
+| TOML-backed `PermissionIndex` | Planned (TASK-007) | Phase-1 production; persists to `<root>/workspaces/<id>/permissions.toml` |
+| Redis-backed `PermissionIndex` | Phase 3 | Distributed deployments |
+
+**Phase 3 trait extensions (deferred per ADR-002).** `grant(role,
+action, resource)` returns to the trait when custom roles ship; a
+`Role::Custom(RoleId)` variant joins `BuiltInRole`. Existing call sites
+remain valid — the change is additive.
 
 ---
 
@@ -1397,6 +1505,14 @@ GitHub → Settings → Secrets to enable upload.
 These decisions are final for their respective phases. An agent must not reverse
 them without creating a new ADR in `docs/adr/`.
 
+> **Numbering note.** §15's ADR-NNN labels are inline summaries of the
+> *strategic* decisions baked into this plan. Tactical ADRs created by
+> implementers live as separate files in `docs/adr/NNN-title.md` with
+> their own numbering sequence (currently
+> `docs/adr/001-jujutsu-pinning.md` and
+> `docs/adr/002-m3-trait-scoping.md`). The two sequences are
+> independent.
+
 ### ADR-001 — Jujutsu over Git for VCS storage
 **Decision:** Use Jujutsu as the storage layer.
 **Rationale:** Jujutsu's operation log provides undo of any operation (not just
@@ -1404,6 +1520,8 @@ commits), first-class conflict resolution, and a cleaner API than libgit2.
 The cost is API instability in `jj-lib`; mitigated by pinning and tracking upstream.
 **Consequence:** Do not expose Git-specific concepts (branches as refs, staging area)
 in the `ContentStore` interface. The interface must be VCS-agnostic.
+**See also:** `docs/adr/001-jujutsu-pinning.md` (filesystem stand-in for
+Phase 1; `jj-lib` integration deferred to TASK-004).
 
 ### ADR-002 — Flutter/Dart as the universal UI layer
 **Decision:** Flutter for all five platforms; no WebView.
@@ -1427,15 +1545,26 @@ Per-instance tenant config must be encrypted and stored per-instance.
 **Consequence:** `liquid-vcs`, `liquid-bindings`, etc. do **not** check permissions.
 They trust that the bridge has already validated the call. This is only safe
 because Dart code cannot call these crates directly — only through the bridge.
+**Mechanism:** The
+`require_permission!(index, principal, action, resource)` macro from
+`liquid-permissions` is the canonical first line of every bridge / CLI
+entrypoint; it awaits `PermissionIndex::check` and short-circuits with
+`Err(LiquidError::Forbidden)` on denial.
+**See also:** `docs/adr/002-m3-trait-scoping.md` for the trait shape
+that this enforcement point depends on.
 
 ### ADR-005 — Storage interface is abstract from the first line
 **Decision:** `ContentStore`, `ReadCache`, and `PermissionIndex` are traits.
-Phase 1 ships in-process stubs; phase 3 swaps in distributed implementations.
+Phase 1 ships in-process / on-disk stubs; phase 3 swaps in distributed
+implementations.
 **Rationale:** Retrofitting abstraction across storage callsites costs more than
 the initial discipline.
 **Consequence:** Application code never imports `JujutsuContentStore`,
-`InProcessCache`, or `InMemoryPermissionIndex` directly. Dependency injection
-at startup only.
+`FilesystemContentStore`, `InProcessCache`, or `InMemoryPermissionIndex`
+directly. Dependency injection at startup only.
+**See also:** `docs/adr/001-jujutsu-pinning.md` (the filesystem stand-in
+exercises this abstraction in M2); `docs/adr/002-m3-trait-scoping.md`
+(the M3 trait shapes ship the Phase-1 subset behind the same abstraction).
 
 ### ADR-006 — Components communicate only through data slots
 **Decision:** Components may not hold direct Dart references to other components.
