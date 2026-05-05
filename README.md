@@ -83,8 +83,8 @@ full developer workflow and `just --list` for every available command.
 |---|---|
 | **App developers** building on Liquid | `docs/sdk-guide/` *(populates in Phase 2)* |
 | **Operators / self-hosters** | `docs/operations/` *(populates in Phase 3)* |
-| **Contributors** to Liquid itself | [`CONTRIBUTING.md`](CONTRIBUTING.md) + [`developer_info.md`](developer_info.md) |
-| **Architecture & design rationale** | [`developer_info.md`](developer_info.md), [`docs/adr/`](docs/adr/), [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) |
+| **Contributors** to Liquid itself | [`CONTRIBUTING.md`](CONTRIBUTING.md) + [`DEVELOPER_INFO.md`](DEVELOPER_INFO.md) |
+| **Architecture & design rationale** | [`DEVELOPER_INFO.md`](DEVELOPER_INFO.md), [`docs/adr/`](docs/adr/), [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) |
 | **AI agents working on this repo** | [`CLAUDE.md`](CLAUDE.md) — mandatory project workflow |
 
 ## Contributing
@@ -101,23 +101,34 @@ help. Please:
 4. Open a PR against `main`. Every PR runs the full Rust test suite, fmt,
    clippy, and (once those layers exist) Flutter analyze + tests + bats.
 
+> **Note on cadence:** Liquid is a single-maintainer, spare-time project
+> until it tags `v1.0.0`. PR review and issue triage happen as the
+> maintainer's schedule allows — please don't read silence as rejection.
+> The *Pre-1.0 obligations checklist* in
+> [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) tracks what becomes
+> a real commitment at v1.0.
+
 ## Security
 
 Found a security issue? **Do not open a public issue.** Report it via GitHub's
-private vulnerability reporting on this repository. See
-[`SECURITY.md`](SECURITY.md) for full details and disclosure timeline.
+private vulnerability reporting on this repository. Pre-1.0 there are no
+SLA commitments; the policy at v1.0 is described in
+[`SECURITY.md`](SECURITY.md).
 
-## Community
+## Community / contact
 
-Liquid is in early development; community channels (chat, mailing list,
-office hours) will open as the project matures past Phase 1. Until then, the
-fastest way to engage is:
+There is **no public contact channel and no chat / mailing list /
+office-hours yet** — those open at v1.0 and are tracked under the
+*Pre-1.0 obligations checklist* in
+[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md). Until then:
 
-- **Questions / discussion:** open a GitHub Discussion (or Issue with the
-  `question` label)
+- **Questions / discussion:** open a GitHub Discussion (or an Issue
+  with the `question` label).
 - **Bugs / requests:** the issue templates in
-  [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/)
-- **Roadmap context:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
+  [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/).
+- **Security reports:** GitHub Security Advisories on this repository
+  (see [`SECURITY.md`](SECURITY.md)).
+- **Roadmap context:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
 
 ## License
 

@@ -187,8 +187,14 @@ finding before committing.
 - [ ] `IMPLEMENTATION_PLAN.md §4/§9` — if trait signatures changed
 - [ ] `IMPLEMENTATION_PLAN.md §12` — if CLI grammar changed
 - [ ] `IMPLEMENTATION_PLAN.md §11` + `docs/sdk-guide/` — if SDK API changed
+- [ ] `IMPLEMENTATION_PLAN.md §17` — if a pre-1.0 obligation just became binding
 - [ ] `docs/adr/NNN-title.md` — if a design decision was made (use `TEMPLATE.md`)
-- [ ] `README.md` — only if the user-visible concept changed
+- [ ] `CHANGELOG.md` — if user-visible behaviour changed (under `## [Unreleased]`)
+- [ ] `README.md` Status table + `TASKS.md` — if a milestone moved Planned → Done
+- [ ] `README.md` (Vision / Why / Quickstart) — only if the user-visible *concept* changed
+- [ ] `DEVELOPER_INFO.md` — if architecture or design rationale changed
+- [ ] **Run the `sync-docs` skill** as the final audit pass; resolve every
+      reported drift before committing
 
 ---
 

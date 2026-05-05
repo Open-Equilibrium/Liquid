@@ -45,6 +45,8 @@ Run through each surface and decide whether the diff requires an update.
 | Storage layout on disk (`FilesystemContentStore` etc.) | `IMPLEMENTATION_PLAN.md` §9 *(`liquid-vcs` layout)* + the relevant ADR |
 | A new `core/liquid-*` crate | `IMPLEMENTATION_PLAN.md` §2 (repo layout) + §9 (crate reference) + the workspace `Cargo.toml` member list |
 | A milestone moves from Planned → Done | `README.md` *(status table)* + `TASKS.md` *(move task to Done section)* + `CHANGELOG.md` *(under `## [Unreleased]`)* |
+| A pre-1.0 commitment becomes binding (e.g. real `security@…` alias is set up, a CoC enforcement window is decided) | `IMPLEMENTATION_PLAN.md` §17 *(tick the relevant checkbox)* + the corresponding "Status / pre-alpha" callout in `SECURITY.md` / `CODE_OF_CONDUCT.md` / `README.md` / `CONTRIBUTING.md` (replace the deferral language with the now-binding text) |
+| A new top-level OSS file is added or removed (e.g. `GOVERNANCE.md`) | `CLAUDE.md` *(Open-source surface table)* + `README.md` Documentation map + `IMPLEMENTATION_PLAN.md` §17 if the addition resolves an obligation |
 | A design decision contradicting or extending an ADR | New ADR file in `docs/adr/NNN-title.md` using `docs/adr/TEMPLATE.md` |
 | User-visible behaviour | `CHANGELOG.md` (`## [Unreleased]` section, Conventional-Commits-style entry) |
 | The `.claude/` config (skills, agents, hooks, rules, settings) | `CLAUDE.md` "Claude Code Tooling" section |
@@ -83,6 +85,17 @@ and with the code:
 8. **License headers.** Apache-2.0 is declared in `core/Cargo.toml`
    workspace metadata; `LICENSE` and `NOTICE` exist at repo root and
    are consistent.
+9. **Pre-1.0 deferrals.** Every "placeholder" / "to be replaced before
+   v1.0" / "Status / pre-alpha" callout in `SECURITY.md`,
+   `CODE_OF_CONDUCT.md`, `README.md`, and `CONTRIBUTING.md` has a
+   matching unticked row in `IMPLEMENTATION_PLAN.md` §17. Conversely,
+   every ticked row in §17 has had its corresponding callout in the
+   doc(s) updated to the now-binding text.
+10. **Filename casing.** Top-level docs are all-caps
+    (`README.md`, `CONTRIBUTING.md`, `DEVELOPER_INFO.md`,
+    `CHANGELOG.md`, `LICENSE`, `NOTICE`, `SECURITY.md`,
+    `CODE_OF_CONDUCT.md`, `CLAUDE.md`, `IMPLEMENTATION_PLAN.md`,
+    `TASKS.md`). New top-level docs follow the same convention.
 
 ## Output
 

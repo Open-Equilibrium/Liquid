@@ -25,6 +25,7 @@ about *how to build it*.
 14. [Testing Strategy](#14-testing-strategy)
 15. [Key Design Decisions](#15-key-design-decisions)
 16. [Release Process](#16-release-process)
+17. [Pre-1.0 Obligations Checklist](#17-pre-10-obligations-checklist)
 
 ---
 
@@ -1610,6 +1611,14 @@ Registry CI enforces the ban; a package failing `flutter build` on any target
 is rejected. The SDK ships a custom `liquid_sdk_lint` package that makes
 violations analyzer errors during development.
 
+> See also (tactical disk ADRs):
+> - `docs/adr/001-jujutsu-pinning.md` — Phase-1 filesystem stand-in;
+>   `jj-lib` deferred to TASK-004.
+> - `docs/adr/002-m3-trait-scoping.md` — M3 trait shapes
+>   (`PermissionIndex`, `IdentityProvider`).
+> - `docs/adr/003-oss-policy.md` — Pre-1.0 OSS posture; rationale for
+>   the §17 deferred-obligations approach.
+
 ---
 
 ## 16. Release Process
@@ -1678,3 +1687,156 @@ Keep commit messages clean — `feat` and `fix` types appear in release notes;
 | Flutter app (desktop) | GitHub Release assets |
 | `liquid_sdk` Dart package | pub.dev or self-hosted registry |
 | Reference apps | Liquid package registry |
+
+---
+
+## 17. Pre-1.0 Obligations Checklist
+
+Liquid is intentionally a **single-maintainer, spare-time project until
+`v1.0.0`**. Several pieces of documentation reference commitments that
+are deliberately *not* in effect yet — contact aliases, response-time
+targets, supported-version promises, governance, and so on. This
+section is the canonical to-do list of those commitments. **Every box
+below must be ticked or deliberately deferred (with rationale recorded
+in an ADR) before tagging `v1.0.0`.** Until then, the docs say "best
+effort, no guarantees", and that's the truthful state of the project.
+
+### 17.1 Identity / contacts
+
+- [ ] Stand up a project-owned domain (`liquid-project.org` or
+      equivalent) and create the email aliases referenced as
+      placeholders today:
+      - `security@…` (referenced in `SECURITY.md`)
+      - `conduct@…` (referenced in `CODE_OF_CONDUCT.md`)
+- [ ] Replace every "placeholder — to be replaced …" note in the
+      OSS files with the real address.
+- [ ] Decide whether to keep the umbrella copyright string
+      "The Liquid Project Contributors" in `LICENSE` and `NOTICE`,
+      or switch to an organisation name (e.g. "Open Equilibrium").
+      Document the choice in an ADR if it changes.
+
+### 17.2 GitHub-organisation-level files
+
+The `Open Equilibrium` GitHub organisation owns this repository and
+should ship organisation-wide community health files (these apply by
+default to every repo in the org that doesn't override them). Add
+these to the `open-equilibrium/.github` repository before `v1.0.0`:
+
+- [ ] `profile/README.md` — org landing page
+- [ ] Org-wide `CODE_OF_CONDUCT.md` (the project's repo-local file
+      can defer to it)
+- [ ] Org-wide `SECURITY.md` (covers vulnerabilities that span more
+      than one repo)
+- [ ] `SUPPORT.md` if the org wants a single intake document
+- [ ] `FUNDING.yml` if sponsorships are accepted
+- [ ] Maintainer / CODEOWNERS conventions (a single document; each
+      repo can extend)
+
+This is captured here because the obligation surfaces from
+project-level `SECURITY.md` and `CODE_OF_CONDUCT.md` — those files
+both reference org-level commitments that don't exist yet.
+
+### 17.3 Security policy
+
+`SECURITY.md` declares the post-1.0 policy as intent only. Before the
+first stable release:
+
+- [ ] Decide and document acknowledgement / triage / fix windows
+      (CERT/CC default is 3 / 10 / 90 business days — choose what is
+      actually sustainable).
+- [ ] Decide and document the supported-version range
+      (e.g. `1.x` plus the previous minor for 12 months).
+- [ ] Decide and document the coordinated-disclosure window
+      (typical: 90 days from confirmed report).
+- [ ] Decide whether reporters are credited by default; what the
+      anonymity opt-out looks like.
+- [ ] Add a safe-harbor statement aligned with
+      [disclose.io](https://disclose.io/) — include both the legal
+      undertaking and any explicit out-of-scope behaviour.
+- [ ] Replace the "Status / pre-alpha" callout in `SECURITY.md`
+      with the now-binding policy.
+
+### 17.4 Code of Conduct enforcement
+
+`CODE_OF_CONDUCT.md` adopts the Contributor Covenant 2.1 by reference
+but defers the *enforcement* mechanics. Before `v1.0.0`:
+
+- [ ] Decide whether enforcement is single-maintainer or delegated to
+      a small CoC committee. If a committee, list members.
+- [ ] Document a response-time target (acknowledge within N business
+      days).
+- [ ] Decide whether to publish CoC actions in aggregate (counts, no
+      names) on a periodic cadence; if so, document the cadence and
+      where the report appears.
+- [ ] Replace the "Status / pre-alpha" callout in
+      `CODE_OF_CONDUCT.md` with the now-binding policy.
+
+### 17.5 Governance and contributor structure
+
+- [ ] Decide whether the project needs a `GOVERNANCE.md`
+      (typically does once there are ≥ 5 active maintainers; not
+      otherwise). If yes, document decision-making, role
+      definitions, and how new maintainers are added.
+- [ ] Decide whether a `CODEOWNERS` file is needed (typically once
+      there are clear sub-team boundaries).
+- [ ] Decide whether contributions require a DCO sign-off
+      (`Signed-off-by:` trailer), a CLA, or neither.
+      Record the decision in an ADR; configure CI accordingly.
+- [ ] Decide whether `MAINTAINERS.md` / `AUTHORS.md` is needed
+      beyond `git log` + the GitHub contributors view.
+
+### 17.6 Cadence and contributor expectations
+
+The current `CONTRIBUTING.md` and `README.md` both say
+"single-maintainer, spare-time, no SLA". Before `v1.0.0`:
+
+- [ ] Replace those callouts with the actual review-cadence
+      expectation (could still be "best-effort" — but be specific).
+- [ ] Decide whether community channels (chat, mailing list,
+      office hours) open at v1.0 or later. Whichever, update the
+      *Community / contact* section of `README.md` to either link
+      them or commit to a date.
+- [ ] Decide release cadence target (calendar-based?
+      milestone-based?).
+
+### 17.7 Release tooling
+
+Most of the release pipeline already exists in §16. The remaining
+gating items:
+
+- [ ] Configure GPG signing on commits (`sign-commit = true` in
+      `core/release.toml`).
+- [ ] Verify `cargo-release` dry-run produces the expected
+      `CHANGELOG.md` from the Conventional-Commits history; collapse
+      the pre-1.0 milestone entries into a single `0.1.0` block on
+      first tag.
+- [ ] Verify CI builds release artefacts (`liquid` CLI binary,
+      Flutter desktop bundles) on every tag push.
+- [ ] Confirm pub.dev / Liquid registry publication paths for the
+      Dart SDK and reference apps.
+- [ ] Bump README badges to point at the released artefacts where
+      relevant.
+
+### 17.8 Documentation freeze
+
+- [ ] Run the `sync-docs` skill against `main` immediately before
+      tagging `v1.0.0`; resolve all reported drift.
+- [ ] Confirm every "Status / pre-alpha", "placeholder", and "best
+      effort" disclaimer has been replaced or deliberately retained
+      with rationale.
+- [ ] Confirm `CHANGELOG.md` has a single coherent `## [1.0.0]`
+      section covering everything shipped between project start and
+      release tag.
+- [ ] Confirm `README.md` Status table reflects the v1.0 release.
+
+---
+
+> **Why this section exists.** The OSS files
+> (`SECURITY.md`, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `README.md`)
+> currently make a small number of *carefully scoped* statements about
+> what the project is and is not. Several of them point readers at
+> "the Pre-1.0 obligations checklist in `IMPLEMENTATION_PLAN.md`"
+> rather than making a commitment that the maintainer cannot uphold
+> at present capacity. This section is that target. ADR-003
+> (`docs/adr/003-oss-policy.md`) records the reasoning behind keeping
+> these commitments deferred until `v1.0.0`.

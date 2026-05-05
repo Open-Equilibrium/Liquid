@@ -4,9 +4,17 @@ Thank you for considering a contribution. Liquid is in early development —
 every well-scoped patch, bug report, and design discussion meaningfully
 shapes the project.
 
+> **Heads up:** Liquid is a **single-maintainer, spare-time project**
+> until it tags `v1.0.0`. Reviews, replies, and merges happen as the
+> maintainer's schedule allows; please don't read silence as rejection.
+> The `IMPLEMENTATION_PLAN.md` *Pre-1.0 obligations checklist* tracks
+> what becomes a real commitment at v1.0 (response-time targets,
+> contact aliases, etc.). Until then, every cadence number in this
+> file is best-effort, not a promise.
+
 This document covers everything you need to know to make a good first
 contribution. For project context (vision, architecture, design rationale)
-see [`developer_info.md`](developer_info.md). For day-to-day project rules
+see [`DEVELOPER_INFO.md`](DEVELOPER_INFO.md). For day-to-day project rules
 that apply equally to humans and AI agents, see [`CLAUDE.md`](CLAUDE.md).
 
 ## Code of Conduct
@@ -37,9 +45,10 @@ The active queue lives in [`TASKS.md`](TASKS.md). If a task interests you:
 
 For anything that changes a public Rust trait, an FFI surface, the SDK API,
 the data model, or the agent CLI grammar: open a GitHub Discussion or a
-draft PR with a written rationale **before** investing days of work. We are
-happy to talk design — we are not happy to ask you to throw away a fully-
-written PR because the boundary was wrong.
+draft PR with a written rationale **before** investing days of work. The
+maintainer would much rather discuss design upfront than ask you to throw
+away a fully-written PR because the boundary was wrong — but please
+don't expect immediate engagement; allow several days.
 
 For decisions that contradict or extend an existing ADR, add a new ADR in
 [`docs/adr/`](docs/adr/) using

@@ -19,7 +19,12 @@
 7. [Feasibility Assessment](#feasibility-assessment)
 8. [Risk Register](#risk-register)
 9. [Competitive Landscape](#competitive-landscape)
-10. [Phasing Summary](#phasing-summary)
+10. [Where to next](#where-to-next)
+
+> The phased milestone breakdown that previously lived here was removed
+> because [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) is the
+> authoritative version and was drifting against it. The progress
+> snapshot lives in [`README.md` → Status](README.md#status).
 
 ## Vision
 
@@ -505,62 +510,9 @@ Liquid's combination of **open SDK + cross-app data-binding components + VCS-nat
 
 ---
 
-## Phasing Summary
+## Where to next
 
-The authoritative milestone-by-milestone breakdown lives in
-[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md). The summary below
-mirrors its four-phase structure; the table at the top of [`README.md`](README.md#status)
-tracks current progress against it.
-
-**Phase 1 — Rust core + Flutter shell skeleton (12–18 months, small team)**
-
-- Rust workspace bootstrap: `liquid-core` primitives (`WorkspaceId`, `PrincipalId`, `ContentHash`, …) and `LiquidError`
-- `liquid-vcs`: Jujutsu-backed `ContentStore` — one repo per workspace from day one (workspace partitioning is non-negotiable from the first line of storage code)
-- `liquid-auth`: file-backed local users + agents (Argon2id + HMAC tokens); OIDC deferred to phase 3
-- `liquid-permissions`: `InMemoryPermissionIndex` stub behind the `PermissionIndex` trait; built-in roles hard-coded
-- `liquid-cache`: `InProcessCache` stub behind the `ReadCache` trait
-- `liquid-sdk-bridge` FFI: `create_workspace`, `list_workspaces`, `load_page`, `write_page`, `check_permission` — every call gates on `require_permission!`
-- Flutter desktop shell (Linux, Windows, macOS): `RootShell`, `WorkspaceSwitcher`, `ExplorerPanel` (page tree + app instance list + tag sections), `PageGrid` with drag/resize/maximise on a placeholder `GridItem`
-- Rust agent CLI subset: `workspace create|list`, `page read|write`, `auth provision-agent|token`
-
-Success criterion: desktop app launches on all three desktop targets; user can create a workspace, open a page, and drag a placeholder grid item; an agent can be provisioned and perform a versioned page write via CLI.
-
-**Phase 2 — SDK + first-party apps (6–9 months)**
-
-- Public Dart SDK (`liquid_sdk`): `AppManifest`, `ComponentManifest`, `LiquidComponent`, `SlotSchema`, `GridApi`, `VcsApi`, `PermissionApi`
-- `liquid-bindings`: `InProcessSlotBroker` + slot wiring UI (long-press output → drag to input); wirings persisted in the workspace VCS at `.liquid/pages/<page_id>/bindings.json`
-- Multi-instance tenant configuration: per-instance encrypted tenant config (AES-256-GCM, key from Argon2id over workspace-owner password); JSON-Schema-driven install form
-- First-party reference apps in Dart: TextEditor, Spreadsheet, Chart — exercise the cross-app component protocol and prove the data binding contract
-- Signed manifests enforced by default in release builds (Ed25519); registry CI pipeline wired
-- Agent CLI extends to app-instance addressing: `liquid app <instance-name> read|write|slot subscribe|slot publish`
-
-Success criterion: a developer builds a Liquid app with data-binding components in Dart in under a day, installs it twice in the same workspace with different tenant configs, and an agent interacts with each instance independently via CLI.
-
-**Phase 3 — Mobile + scale + extensions (6–12 months)**
-
-- Mobile targets (iOS, Android) — same Flutter/Dart codebase from phases 1–2; gesture audit for touch + 44 pt minimums; explorer collapses to a bottom sheet on narrow screens
-- `RedisCache` swapped in behind the `ReadCache` trait (feature flag `distributed-cache`); `MaterializedPermissionIndex` swapped in behind `PermissionIndex` — zero application-code changes
-- OIDC identity provider integration (Google, Microsoft, generic OpenID Connect)
-- Extension API: apps declare `ExtensionPoint`s in their manifest; signed extensions hook lifecycle events / slot transforms in the host app's restricted context
-- Self-hosted registry: REST `POST /packages` with signature verification; `liquid registry publish|install`; per-workspace trusted signing keys
-
-**Phase 4 — Ecosystem + high availability**
-
-- Kafka-class event bus replacing in-process slot broadcast (feature flag `distributed-bus`); per-workspace topics; lag-based backpressure
-- Multi-region Jujutsu replication: per-workspace primary, async replication via the event bus, RPO ≤ 1 commit
-- Scale hardening: k6 load tests at 10 000 concurrent users per workspace sustained 30 minutes; profile against the SDK Performance Contract bounds
-- Community app ecosystem opens once the security review and scale targets are signed off
-
----
-
-## Closing notes
-
-Liquid addresses real, under-served problems: VCS-native content, cross-app data-binding composability, agents as genuine first-class principals operating through a structured CLI, and a platform built for enterprise scale without SaaS lock-in.
-
-Performance, security, scalability, and stability are not aspirational — they are design constraints enforced from phase 1. The key architectural decisions that make the scale targets achievable are all standard, proven patterns: content-addressed caching, a materialized permission index, workspace-partitioned storage, and a stateless request path. None of them are exotic; all of them must be designed for early — phase 1 ships them as in-process stubs behind stable trait interfaces, so phase 3 can swap in the distributed implementations without touching application code.
-
-Flutter as the universal UI layer resolves the mobile question cleanly: one Dart codebase targets all five platforms through a consistent GPU-rendered pipeline. There is no WebView ceiling, no platform-specific rendering divergence, and no split SDK. Mobile arrives in phase 3 as a build target, not a separate workstream. The Rust ↔ Dart boundary via `flutter_rust_bridge` keeps all business logic, storage, and security in Rust, where it belongs.
-
-The primary execution risk remains **scope**. The path to success is shipping a desktop v1 in Flutter that demonstrates the SDK, data binding, agent CLI, and VCS audit trail working together convincingly. That is the proof of concept that attracts contributors and validates the protocol before it is opened to the community.
-
-With disciplined phasing, Liquid is feasible. Without it, it joins the long list of ambitious open-source platforms that never shipped.
+- For the milestone-by-milestone build plan: [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
+- For active tasks and queued work: [`TASKS.md`](TASKS.md).
+- For specific architectural decisions: [`docs/adr/`](docs/adr/).
+- For contributor workflow: [`CONTRIBUTING.md`](CONTRIBUTING.md).

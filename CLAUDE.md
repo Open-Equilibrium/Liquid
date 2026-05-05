@@ -30,7 +30,7 @@ working on this project.
 | File | Purpose |
 |---|---|
 | `README.md` | OSS-standard project entry point — vision, status, quickstart, doc map |
-| `developer_info.md` | Architecture, design rationale, feasibility, phasing — moved out of README |
+| `DEVELOPER_INFO.md` | Architecture, design rationale, feasibility, phasing — moved out of README |
 | `IMPLEMENTATION_PLAN.md` | Authoritative milestone-by-milestone build guide |
 | `TASKS.md` | Active task queue |
 | `CONTRIBUTING.md` | Contributor workflow, prereqs, daily commands, PR rules |
@@ -138,7 +138,7 @@ Then manually review your diff for:
 - If a milestone moved from Planned → Done: tick it in `README.md`'s status table and move the
   task entry in `TASKS.md` to the Done section.
 - If the project concept (vision, scope, audience) changed: update `README.md`.
-- If architecture/design rationale changed: update `developer_info.md`.
+- If architecture/design rationale changed: update `DEVELOPER_INFO.md`.
 - After all of the above, **invoke the `sync-docs` skill** to audit the whole doc set for drift
   before committing.
 
@@ -235,7 +235,7 @@ git so it works identically on cloud Claude Code and local sessions.
   start of every implementation task. Hard gates between every step.
 - `deliver` — final verification, diff review, PR-ready summary.
 - `review-diff` — structured review of the current git diff.
-- `sync-docs` — audit `README.md`, `developer_info.md`, `IMPLEMENTATION_PLAN.md`,
+- `sync-docs` — audit `README.md`, `DEVELOPER_INFO.md`, `IMPLEMENTATION_PLAN.md`,
   `TASKS.md`, `CHANGELOG.md`, and `docs/adr/` for drift against the current code.
   Invoke after `implement` Step 7 (or before any PR) so the whole doc set stays
   consistent.

@@ -84,7 +84,7 @@ below covers the complete Phase 1 progress to date.
   `core/Cargo.toml`).
 - `NOTICE` — third-party attribution per Apache convention.
 - `README.md` — rewritten in OSS-standard format with a status table.
-- `developer_info.md` — design rationale and architecture detail
+- `DEVELOPER_INFO.md` — design rationale and architecture detail
   moved out of the README.
 - `CONTRIBUTING.md` — full contributor workflow and project rules.
 - `CODE_OF_CONDUCT.md` — Contributor Covenant 2.1, adopted by

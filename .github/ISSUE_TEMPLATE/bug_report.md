@@ -29,8 +29,8 @@ assignees: ''
 ## Reproducer
 
 <!-- A minimal code snippet, CLI invocation, or test case that demonstrates the
-     issue. The smaller the better — we will fix it faster the easier it is to
-     run. -->
+     issue. Smaller is better; the easier it is to reproduce, the more likely
+     it gets attention from a spare-time maintainer. -->
 
 ```text
 
