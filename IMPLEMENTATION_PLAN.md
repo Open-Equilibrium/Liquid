@@ -249,6 +249,17 @@ invert the operation without consulting the underlying store.
 
 ### 4.2 PermissionIndex (`liquid-permissions`)
 
+All methods return [`liquid_core::Result<T>`][result]. Per the §4.1
+convention, errors normalise to `LiquidError` rather than a parallel
+`PermError` hierarchy — same reasoning, same workspace-wide policy
+(`CLAUDE.md`).
+
+The `RoleId` parameter from the original draft is replaced by a
+[`BuiltInRole`] enum because Phase 1 hard-codes the role → permission
+matrix (§9). The `grant(role, action, resource)` method from the draft is
+deferred to Phase 3, when custom roles become configurable; in Phase 1 it
+would be unreachable code, so it is omitted rather than stubbed.
+
 ```rust
 #[async_trait]
 pub trait PermissionIndex: Send + Sync {
@@ -259,26 +270,34 @@ pub trait PermissionIndex: Send + Sync {
         principal: PrincipalId,
         action: Action,
         resource: Resource,
-    ) -> Result<bool, PermError>;
+    ) -> Result<bool>;
 
-    /// Grant `role` the ability to perform `action` on `resource`.
-    /// Triggers an async index rebuild for affected principals.
-    async fn grant(
-        &self,
-        role: RoleId,
-        action: Action,
-        resource: Resource,
-    ) -> Result<(), PermError>;
-
-    /// Assign `principal` to `role` within `workspace`.
+    /// Bind `principal` to `role` within `workspace`. For roles whose
+    /// `requires_scope()` is true (`AppViewer`, `AppEditor`), `scope`
+    /// must be `Some(_)`; for workspace-wide roles, `scope` may be `None`.
     async fn assign_role(
         &self,
         workspace: WorkspaceId,
         principal: PrincipalId,
-        role: RoleId,
-    ) -> Result<(), PermError>;
+        role: BuiltInRole,
+        scope: Option<Resource>,
+    ) -> Result<()>;
+
+    /// Reverse `assign_role`. Idempotent.
+    async fn revoke_role(
+        &self,
+        workspace: WorkspaceId,
+        principal: PrincipalId,
+        role: BuiltInRole,
+        scope: Option<Resource>,
+    ) -> Result<()>;
 }
 ```
+
+The canonical permission gate at every bridge / CLI callsite is the
+`require_permission!(index, principal, action, resource)` macro
+(re-exported from `liquid_permissions`). It awaits `check` and returns
+`Err(LiquidError::Forbidden)` from the enclosing `async fn` on denial.
 
 ### 4.3 ReadCache (`liquid-cache`)
 
@@ -333,24 +352,49 @@ pub trait SlotBroker: Send + Sync {
 
 ### 4.5 Identity (`liquid-auth`)
 
+All methods return [`liquid_core::Result<T>`][result] (same `LiquidError`
+normalisation as §4.1 / §4.2). The original draft's `AuthError` is folded
+into `LiquidError::Forbidden` (auth failure) and `LiquidError::InvalidInput`
+(malformed token / bad input) — never leak which mode of failure occurred
+to the caller.
+
 ```rust
 #[async_trait]
 pub trait IdentityProvider: Send + Sync {
     /// Validate a token and return the corresponding PrincipalId.
-    async fn validate_token(&self, token: &str) -> Result<PrincipalId, AuthError>;
+    /// Returns `LiquidError::Forbidden` for any failure mode.
+    async fn validate_token(&self, token: &str) -> Result<PrincipalId>;
 
     /// Issue a short-lived session token for `principal`.
-    async fn issue_token(&self, principal: PrincipalId) -> Result<String, AuthError>;
+    async fn issue_token(&self, principal: PrincipalId) -> Result<String>;
 
-    /// Provision a new agent principal within `workspace`.
+    /// Provision a new agent principal within `workspace`. The bridge
+    /// layer is responsible for permission-gating this call.
     async fn provision_agent(
         &self,
         workspace: WorkspaceId,
         authorized_by: PrincipalId,
         name: &str,
-    ) -> Result<PrincipalId, AuthError>;
+    ) -> Result<PrincipalId>;
 }
 ```
+
+**Token format (Phase 1).** `principal . expires_unix . hmac_hex` —
+three dot-separated fields, each URL-safe by construction. The
+`workspace_id` field from the original §9 draft is dropped: a session
+token represents the principal's identity, not their authority over a
+specific workspace; authority comes from `PermissionIndex` bindings.
+Carrying the field would invite the bug of misinterpreting it as
+authorisation. `principal` is encoded as `u:<uuid>` for users or
+`a:<uuid>` for agents.
+
+**Local backend.** `LocalIdentityProvider` (Phase 1) persists users at
+`<root>/users.toml` (Argon2id-hashed passwords) and provisioned agents
+at `<root>/agents.toml`. It exposes two inherent helpers beyond the
+trait surface — `register_user(username, password)` and
+`authenticate_user(username, password) -> token` — that are local-only;
+Phase 3's OIDC backend will replace the `authenticate_user` flow with a
+browser redirect and code exchange instead of password verification.
 
 ---
 
