@@ -24,7 +24,7 @@ SDK, and reference apps land in subsequent phases.
 |---|---|---|
 | **M1** Workspace + `liquid-core` primitives | `WorkspaceId`, `PrincipalId`, `LiquidError`, … | ✅ Done |
 | **M2** VCS layer | `ContentStore` trait + `InMemory` + `Filesystem` impls | ✅ Done (jj-lib backend deferred — see [ADR-001](docs/adr/001-jujutsu-pinning.md)) |
-| **M3** Auth + permissions | `LocalIdentityProvider` (Argon2id + HMAC) + `InMemoryPermissionIndex` + `require_permission!` | ✅ Done |
+| **M3** Auth + permissions | `LocalIdentityProvider` (Argon2id + HMAC) + `InMemoryPermissionIndex` + `FilesystemPermissionIndex` + `require_permission!` | ✅ Done |
 | **M4** Cache layer stub | `InProcessCache` behind `ReadCache` trait | 🔜 Next |
 | **M5** FFI bridge | `flutter_rust_bridge` surface | Planned |
 | **M6** Flutter shell skeleton | `RootShell`, `ExplorerPanel`, `PageGrid` | Planned |

@@ -50,12 +50,39 @@ pub trait PermissionIndex: Send + Sync {
 }
 
 /// One row in the role-binding table.
+///
+/// `pub(crate)` so the on-disk variant in [`crate::filesystem`] can construct
+/// and consume the same shape; not exposed in the public API.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-struct Binding {
-    workspace: WorkspaceId,
-    principal: PrincipalId,
-    role: BuiltInRole,
-    scope: Option<Resource>,
+pub(crate) struct Binding {
+    pub(crate) workspace: WorkspaceId,
+    pub(crate) principal: PrincipalId,
+    pub(crate) role: BuiltInRole,
+    pub(crate) scope: Option<Resource>,
+}
+
+impl Binding {
+    /// Whether this binding grants `principal` the right to perform `action`
+    /// on `resource`. Encapsulates the workspace + scope + role-matrix check
+    /// so both `InMemoryPermissionIndex` and `FilesystemPermissionIndex`
+    /// share one definition.
+    pub(crate) fn matches(
+        &self,
+        principal: PrincipalId,
+        action: Action,
+        resource: &Resource,
+    ) -> bool {
+        if self.principal != principal {
+            return false;
+        }
+        if !workspace_matches(self.workspace, resource) {
+            return false;
+        }
+        if !scope_matches(self.scope.as_ref(), resource) {
+            return false;
+        }
+        self.role.permits(action, resource)
+    }
 }
 
 /// In-memory implementation of [`PermissionIndex`]. Phase-1 only — the disk-
@@ -81,21 +108,9 @@ impl PermissionIndex for InMemoryPermissionIndex {
         resource: Resource,
     ) -> Result<bool> {
         let map = self.bindings.lock().map_err(poisoned)?;
-        for binding in map.iter() {
-            if binding.principal != principal {
-                continue;
-            }
-            if !workspace_matches(binding.workspace, &resource) {
-                continue;
-            }
-            if !scope_matches(binding.scope.as_ref(), &resource) {
-                continue;
-            }
-            if binding.role.permits(action, &resource) {
-                return Ok(true);
-            }
-        }
-        Ok(false)
+        Ok(map
+            .iter()
+            .any(|binding| binding.matches(principal, action, &resource)))
     }
 
     async fn assign_role(

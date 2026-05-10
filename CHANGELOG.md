@@ -18,7 +18,25 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
-Nothing pending — see [`TASKS.md`](TASKS.md) for what's queued next.
+### Added
+
+- `liquid-permissions::FilesystemPermissionIndex` — TOML-backed
+  implementation of `PermissionIndex` (TASK-007). Bindings persist as
+  `<root>/workspaces/<id>/permissions.toml`; one file per workspace,
+  atomic writes via tmp-then-rename, in-memory cache for O(n-bindings)
+  `check`. Same trait as `InMemoryPermissionIndex`; callers don't
+  change. Finishes M3.
+- 9 integration tests for the disk variant (round-trip, persistence
+  across instance restart, scope validation, multi-workspace file
+  separation, malformed-TOML rejection, empty-bindings round-trip).
+  Workspace test count: **87** (was 78).
+
+### Changed
+
+- `Binding` (private to `liquid-permissions`) is now `pub(crate)` and
+  carries a `matches()` method that encapsulates the workspace + scope
+  + role-matrix check. Both index implementations share that one
+  definition rather than duplicating the logic. No public-API change.
 
 ## [0.1.0-pre.M3] — 2026-05-05
 

@@ -500,9 +500,11 @@ backends ship now, disk-backed variants are deferred, and the original
       resource)` macro calls `PermissionIndex::check` and returns
       `Err(LiquidError::Forbidden)` on denial. Re-exported from
       `liquid_permissions`.
-- [ ] Implement disk-backed `PermissionIndex` (TASK-007) — TOML file at
-      `<root>/workspaces/<id>/permissions.toml` per §9. The trait is
-      already in place; this is purely an additional implementation.
+- [x] Implement disk-backed `PermissionIndex` (TASK-007) — TOML file at
+      `<root>/workspaces/<id>/permissions.toml` per §9. One file per
+      workspace, atomic writes via tmp-then-rename (same pattern as
+      `FilesystemContentStore` per ADR-001), in-memory cache so `check`
+      is the same complexity as the in-memory variant.
 
 **Success criterion (proven in
 `core/liquid-permissions/tests/m3_end_to_end.rs`):** Unit test wires
@@ -1039,7 +1041,7 @@ resource)` is the canonical macro at every bridge / CLI callsite
 | Impl | Status | When to use |
 |---|---|---|
 | `InMemoryPermissionIndex` | Shipped (TASK-005) | Tests, Phase-1 dev mode |
-| TOML-backed `PermissionIndex` | Planned (TASK-007) | Phase-1 production; persists to `<root>/workspaces/<id>/permissions.toml` |
+| `FilesystemPermissionIndex` | Shipped (TASK-007) | Phase-1 production; persists to `<root>/workspaces/<id>/permissions.toml` |
 | Redis-backed `PermissionIndex` | Phase 3 | Distributed deployments |
 
 **Phase 3 trait extensions (deferred per ADR-002).** `grant(role,
