@@ -348,6 +348,8 @@ dependencies = [
  "serde",
  "tempfile",
  "tokio",
+ "toml",
+ "uuid",
 ]
 
 [[package]]

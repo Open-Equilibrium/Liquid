@@ -64,22 +64,35 @@ specific upstream version this session).
 Jujutsu workspace via the pinned `jj-lib` version named in ADR-001. The
 trait abstraction (ADR-005) means callers won't change.
 
+---
+
+## Done tasks
+
 ### [TASK-007] Disk-backed `PermissionIndex`
 
 **Phase:** 1
 **Milestone:** M3 (IMPLEMENTATION_PLAN.md §5.3, last bullet)
-**Status:** Planned
-**Blocked by:** TASK-005
+**Status:** Done
 
-**What.** Ship a TOML-backed implementation of `PermissionIndex` that
-persists role bindings to `<root>/workspaces/<id>/permissions.toml` (per
-§9). `InMemoryPermissionIndex` from TASK-005 stays as the test/dev
-backend. Application code depends only on the trait, so the swap is
-transparent.
+**What.** Shipped `FilesystemPermissionIndex` — a TOML-backed
+implementation of `PermissionIndex` persisting role bindings to
+`<root>/workspaces/<id>/permissions.toml` (per §9). One file per
+workspace, atomic writes via tmp-then-rename (same pattern as
+`FilesystemContentStore` per ADR-001), in-memory cache keeping `check`
+at the same complexity as the in-memory variant. The matching logic
+moved into `Binding::matches()` so both backends share one definition.
 
----
-
-## Done tasks
+**Acceptance criteria.**
+- [x] `cargo test -p liquid-permissions` is green (12 in-memory unit +
+      9 filesystem integration + 1 M3 end-to-end = 22 tests)
+- [x] `cargo fmt --check` and
+      `cargo clippy --workspace --all-targets --locked -- -D warnings`
+      clean
+- [x] No `unwrap()` / `expect()` outside test code
+- [x] Bindings persist across instance restart
+- [x] Workspace bindings stored in separate files; one workspace's
+      permissions never load from another's file
+- [x] Malformed TOML returns `LiquidError::InvalidInput`, never panics
 
 ### [TASK-005] `liquid-permissions` trait + `InMemoryPermissionIndex` + `require_permission!`
 
