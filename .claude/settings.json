@@ -51,11 +51,13 @@
       "Bash(head *)",
       "Bash(tail *)",
       "Bash(jq *)",
-      "Bash(python3 -c *)",
+      "Bash(.claude/scripts/py *)",
       "Bash(bash -n *)",
       "Bash(.claude/hooks/filter-test-output.sh)",
       "Bash(.claude/hooks/save-artifacts.sh)",
-      "Bash(.claude/hooks/session-start.sh)"
+      "Bash(.claude/hooks/session-start.sh)",
+      "Bash(./scripts/ai-check.sh)",
+      "Bash(./scripts/sync-docs-check.sh)"
     ],
     "deny": [
       "Read(./.env)",

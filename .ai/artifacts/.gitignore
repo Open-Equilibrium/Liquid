@@ -1,7 +1,9 @@
 # Local Claude Code artifacts: logs, screenshots, diff snapshots.
 # Keep directories tracked but ignore captured contents.
+# See README.md in this directory for the naming + retention convention.
 *
 !.gitignore
+!README.md
 !logs/
 !ui/
 !diffs/

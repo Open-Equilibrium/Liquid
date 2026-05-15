@@ -1,0 +1,43 @@
+name: AI Config Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.claude/**'
+      - 'CLAUDE.md'
+      - 'scripts/ai-check.sh'
+      - 'tests/fixtures/noisy-cargo.log'
+      - '.github/workflows/ai-check.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.claude/**'
+      - 'CLAUDE.md'
+      - 'scripts/ai-check.sh'
+      - 'tests/fixtures/noisy-cargo.log'
+      - '.github/workflows/ai-check.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ai-check:
+    name: ai-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install jq
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+          jq --version
+
+      - name: Run ai-check
+        run: ./scripts/ai-check.sh

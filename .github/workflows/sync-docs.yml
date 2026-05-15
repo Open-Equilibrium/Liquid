@@ -1,0 +1,40 @@
+name: Sync Docs
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'README.md'
+      - 'TASKS.md'
+      - 'CHANGELOG.md'
+      - 'IMPLEMENTATION_PLAN.md'
+      - 'docs/adr/**'
+      - 'scripts/sync-docs-check.sh'
+      - '.github/workflows/sync-docs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'README.md'
+      - 'TASKS.md'
+      - 'CHANGELOG.md'
+      - 'IMPLEMENTATION_PLAN.md'
+      - 'docs/adr/**'
+      - 'scripts/sync-docs-check.sh'
+      - '.github/workflows/sync-docs.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sync-docs-check:
+    name: sync-docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run sync-docs-check
+        run: ./scripts/sync-docs-check.sh

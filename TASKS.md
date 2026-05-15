@@ -64,6 +64,41 @@ specific upstream version this session).
 Jujutsu workspace via the pinned `jj-lib` version named in ADR-001. The
 trait abstraction (ADR-005) means callers won't change.
 
+### [TASK-008] Minimal agent CLI (M6.5)
+
+**Phase:** 1
+**Milestone:** M6.5 (IMPLEMENTATION_PLAN.md §5.7)
+**Status:** Planned
+**Blocked by:** M5 FFI bridge
+
+**What.** Ship the minimum `liquid` CLI surface that drives the MVP slice
+(`tests/cli/00_mvp_slice.bats`): `workspace create`, `auth provision-agent`,
+`auth token`, `page write`, `page read`, `audit list`, `page undo`. Every
+command validates its token against `IdentityProvider` and runs
+`require_permission!` before any state mutation (Absolute Rule 4). Output
+follows the `--format text|json` convention from §12. Lands before any
+Flutter shell work (M6) so the CLI-before-UI gate is unambiguous.
+
+**Acceptance criteria.**
+- [ ] `bats tests/cli/00_mvp_slice.bats` is green (the spec was added in
+      the same commit train, currently `skip "pending M6.5"`).
+- [ ] Every subcommand has a focused bats test covering the happy path
+      and at least one auth-failure path.
+- [ ] No `unwrap()` / `expect()` outside `#[cfg(test)]`.
+- [ ] `IMPLEMENTATION_PLAN.md` §12 grammar matches every shipped subcommand.
+
+### [TASK-009] Full agent CLI (M7)
+
+**Phase:** 1
+**Milestone:** M7 (IMPLEMENTATION_PLAN.md §5.8)
+**Status:** Planned
+**Blocked by:** TASK-008
+
+**What.** Extend the CLI from M6.5 to cover the rest of §12: `workspace
+list/delete`, `page history`, `auth login/whoami`, `app …` subcommands,
+and the `--as` impersonation flag. Every mutation continues to run
+`require_permission!` first; every command has bats coverage.
+
 ---
 
 ## Done tasks

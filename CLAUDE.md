@@ -183,6 +183,23 @@ just run           # flutter run -d linux
 just cli -- --help # run the liquid CLI
 just services-up   # start Redis / Redpanda via Docker Compose (Phase 3+)
 just check         # full pre-push validation (lint + test)
+just ai-check      # validate repo-local .claude/ configuration
+```
+
+### Filtered variants (default for cloud / agent sessions)
+
+Cloud Claude Code sessions and agent runs should prefer the `*-filtered`
+recipes — each pipes raw stdout/stderr through
+`.claude/hooks/filter-test-output.sh`, stores the raw log under
+`.ai/artifacts/logs/`, and prints only a compact failure-oriented summary
+to the main thread. Use them whenever you expect more than ~50 lines of
+test or lint output:
+
+```sh
+just test-rust-filtered    # cargo test --workspace, summarised
+just test-sdk-filtered     # flutter test (sdk/liquid_sdk), summarised
+just test-cli-filtered     # bats tests/cli/, summarised
+just lint-rust-filtered    # cargo fmt --check + clippy, summarised
 ```
 
 ## Running the Full Stack Locally
@@ -269,12 +286,20 @@ Rules are merged into context for matching paths: `testing.md`, `rust.md`
 - `permissions.allow`: pre-approves common read-only commands (`cargo
   check/test/clippy/fmt`, `flutter analyze/test/pub get`, `dart analyze`,
   `just lint*/test*/fmt*/check`, `bats tests/cli/*`, `git status/diff/log`,
-  `rg`/`grep`/`jq`, the project's own hook scripts) so routine work runs
-  without permission prompts.
+  `rg`/`grep`/`jq`, the project's own hook + check scripts, and the
+  `.claude/scripts/py` wrapper) so routine work runs without permission
+  prompts.
 - `permissions.deny`: blocks reads of secrets (`.env`, `secrets/**`,
   Google/Firebase service files, keystores, `*.p12`) and destructive shell
   commands (`rm -rf`, `curl|sh`, `git push --force/-f`, `git reset --hard`,
   `git clean -f`, hook bypass via `--no-verify`).
+
+### Scripts (`.claude/scripts/`)
+- `py` — vetted Python entry point. Replaces the previous blanket
+  `python3 -c *` permission with a fixed, auditable subcommand list
+  (`json-pretty`, `json-check`, `yaml-check`, `hash`, `version`). To add
+  a new use case, extend the script and review the change; never bypass
+  the wrapper with `python3 -c "<arbitrary>"`.
 
 ### Project commands quick reference
 

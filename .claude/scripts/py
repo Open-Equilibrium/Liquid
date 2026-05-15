@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# .claude/scripts/py — vetted entry point for Claude-Code-invoked Python.
+#
+# The Claude Code `permissions.allow` list used to grant `python3 -c *`,
+# which is effectively "run arbitrary Python". This wrapper narrows that
+# blast radius: agents call `.claude/scripts/py <subcommand> [args...]`
+# and only the subcommands defined below execute. Anything else exits 2.
+#
+# Add a subcommand by adding a `case` arm. Each subcommand should be:
+#   - read-only over the working tree (no rm/write), or
+#   - write only to .ai/artifacts/** (the staging area for agent output).
+# Do not invoke `python3 -c "<arbitrary string>"` from here.
+
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE' >&2
+Usage: .claude/scripts/py <subcommand> [args...]
+
+Subcommands:
+  json-pretty <file>     Pretty-print a JSON file (uses json.tool).
+  json-check <file>      Exit 0 iff <file> parses as JSON, else 1.
+  yaml-check <file>      Exit 0 iff <file> parses as YAML (requires PyYAML).
+  hash <file>            Print SHA-256 of <file> (hex, single line).
+  version                Print the python3 version this wrapper resolves.
+USAGE
+}
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "py: python3 is not on PATH" >&2
+  exit 2
+fi
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  json-pretty)
+    [ "$#" -eq 1 ] || { usage; exit 2; }
+    exec python3 -m json.tool -- "$1"
+    ;;
+  json-check)
+    [ "$#" -eq 1 ] || { usage; exit 2; }
+    python3 - "$1" <<'PY'
+import json, sys
+with open(sys.argv[1], 'rb') as f:
+    json.load(f)
+PY
+    ;;
+  yaml-check)
+    [ "$#" -eq 1 ] || { usage; exit 2; }
+    python3 - "$1" <<'PY'
+import sys
+try:
+    import yaml  # type: ignore
+except ImportError:
+    print("py: PyYAML not installed", file=sys.stderr)
+    sys.exit(2)
+with open(sys.argv[1], 'rb') as f:
+    yaml.safe_load(f)
+PY
+    ;;
+  hash)
+    [ "$#" -eq 1 ] || { usage; exit 2; }
+    python3 - "$1" <<'PY'
+import hashlib, sys
+h = hashlib.sha256()
+with open(sys.argv[1], 'rb') as f:
+    for chunk in iter(lambda: f.read(65536), b''):
+        h.update(chunk)
+print(h.hexdigest())
+PY
+    ;;
+  version)
+    exec python3 --version
+    ;;
+  ""|-h|--help|help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "py: unknown subcommand: $cmd" >&2
+    usage
+    exit 2
+    ;;
+esac

@@ -68,8 +68,11 @@ Cargo.lock.bak
 # ─── AI / agent artifacts ───────────────────────────────────────────────
 # .claude/ is the repo-local AI agent config — it IS tracked.
 # .ai/ holds run-time agent artefacts (raw logs, diffs, screenshots) —
-# these are session-local and should not be committed.
-.ai/
+# these are session-local and should not be committed. The single
+# tracked file is .ai/artifacts/README.md (documents the convention);
+# .ai/artifacts/.gitignore handles the per-subtree exceptions.
+.ai/*
+!.ai/artifacts/
 
 # Per-developer Claude Code settings overlay — local only.
 .claude/settings.local.json
