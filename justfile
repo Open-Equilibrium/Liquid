@@ -35,10 +35,20 @@ build-rust:
 test-rust:
     cargo test --manifest-path core/Cargo.toml --workspace
 
+# Run all Rust tests, piping output through filter-test-output.sh
+# (compact failure-oriented summary; raw log under .ai/artifacts/logs/).
+test-rust-filtered:
+    bash -c 'set -o pipefail; cargo test --manifest-path core/Cargo.toml --workspace 2>&1 | .claude/hooks/filter-test-output.sh'
+
 # Lint Rust (format check + clippy)
 lint-rust:
     cargo fmt --manifest-path core/Cargo.toml --check
     cargo clippy --manifest-path core/Cargo.toml --all-targets -- -D warnings
+
+# Lint Rust, piping clippy output through filter-test-output.sh
+lint-rust-filtered:
+    bash -c 'set -o pipefail; cargo fmt --manifest-path core/Cargo.toml --check 2>&1 | .claude/hooks/filter-test-output.sh'
+    bash -c 'set -o pipefail; cargo clippy --manifest-path core/Cargo.toml --all-targets -- -D warnings 2>&1 | .claude/hooks/filter-test-output.sh'
 
 # Auto-fix Rust formatting
 fmt-rust:
@@ -94,6 +104,10 @@ build-all:
 test-sdk:
     cd sdk/liquid_sdk && flutter test --coverage
 
+# Run SDK tests, piping output through filter-test-output.sh
+test-sdk-filtered:
+    bash -c 'set -o pipefail; (cd sdk/liquid_sdk && flutter test) 2>&1 | .claude/hooks/filter-test-output.sh'
+
 # Lint the SDK
 lint-sdk:
     cd sdk/liquid_sdk && dart format --output=none --set-exit-if-changed .
@@ -108,6 +122,10 @@ fmt-sdk:
 # Run CLI integration tests (requires bats)
 test-cli:
     bats tests/cli/
+
+# Run CLI integration tests, piping output through filter-test-output.sh
+test-cli-filtered:
+    bash -c 'set -o pipefail; bats tests/cli/ 2>&1 | .claude/hooks/filter-test-output.sh'
 
 # ── Repo-local Claude Code config ─────────────────────────────────────────────
 
