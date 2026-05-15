@@ -648,6 +648,30 @@ mutation runs `require_permission!` first.
 
 ---
 
+### 5.8a Phase-1 acceptance test — the MVP slice
+
+`tests/cli/00_mvp_slice.bats` is the single end-to-end acceptance test
+for Phase 1's data path. It exercises, in order:
+
+1. `liquid workspace create` (M6.5)
+2. `liquid auth provision-agent` (M6.5)
+3. `liquid page write` (M6.5, M2 store, M3 permissions)
+4. `liquid page read` (M6.5)
+5. `liquid audit list` (M6.5; reads `op_log.jsonl`)
+6. `liquid page undo` (M6.5)
+7. `liquid page read` post-undo — must report not-found
+
+Plus one negative path proving Absolute Rule 4: an `AppViewer` agent
+must be rejected with `Forbidden` on `page write`.
+
+The file currently `skip`s every test with the message `pending M6.5`.
+Each `skip` line is removed as the matching subcommand goes green. When
+the bats file passes end-to-end (no skips), Phase 1 is *functionally*
+done — the remaining items below are exit criteria around polish
+(cross-platform builds, lint clean, etc.).
+
+---
+
 ### 5.9 Phase 1 Exit Criteria
 
 - [ ] Desktop app runs on Linux, Windows, and macOS from a single `flutter build` command
