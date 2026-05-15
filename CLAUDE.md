@@ -286,12 +286,20 @@ Rules are merged into context for matching paths: `testing.md`, `rust.md`
 - `permissions.allow`: pre-approves common read-only commands (`cargo
   check/test/clippy/fmt`, `flutter analyze/test/pub get`, `dart analyze`,
   `just lint*/test*/fmt*/check`, `bats tests/cli/*`, `git status/diff/log`,
-  `rg`/`grep`/`jq`, the project's own hook scripts) so routine work runs
-  without permission prompts.
+  `rg`/`grep`/`jq`, the project's own hook + check scripts, and the
+  `.claude/scripts/py` wrapper) so routine work runs without permission
+  prompts.
 - `permissions.deny`: blocks reads of secrets (`.env`, `secrets/**`,
   Google/Firebase service files, keystores, `*.p12`) and destructive shell
   commands (`rm -rf`, `curl|sh`, `git push --force/-f`, `git reset --hard`,
   `git clean -f`, hook bypass via `--no-verify`).
+
+### Scripts (`.claude/scripts/`)
+- `py` — vetted Python entry point. Replaces the previous blanket
+  `python3 -c *` permission with a fixed, auditable subcommand list
+  (`json-pretty`, `json-check`, `yaml-check`, `hash`, `version`). To add
+  a new use case, extend the script and review the change; never bypass
+  the wrapper with `python3 -c "<arbitrary>"`.
 
 ### Project commands quick reference
 
