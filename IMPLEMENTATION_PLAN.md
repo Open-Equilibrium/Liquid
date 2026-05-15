@@ -555,7 +555,50 @@ back, and the round-trip data matches.
 
 ---
 
-### 5.6 Milestone 6 — Flutter shell skeleton (week 9–14)
+### 5.6 Milestone 6.5 — Minimal agent CLI (week 8–10)
+
+> **Why this is §5.6 and not §5.7.** Project Absolute Rule 6 (`CLAUDE.md`)
+> requires the data path to be exercisable via CLI before any UI work
+> begins. M6 (Flutter shell skeleton) is the first UI-bearing milestone
+> in Phase 1, so the minimum CLI surface needed to drive the *MVP slice*
+> — workspace create → provision-agent → page write → page read → audit
+> → undo — lands **before** M6 work starts. This section is therefore
+> numbered §5.6 (out of §5 narrative order) so a reader following the
+> plan top-to-bottom hits the CLI gate before the UI. The `.5` in the
+> milestone name indicates that it was carved out of the original M7;
+> the rest of the §12 surface ships in M7.
+
+See [§12 Agent CLI Specification](#12-agent-cli-specification) for the full
+command grammar. M6.5 implements only the slice that unblocks the
+MVP-slice acceptance test (`tests/cli/00_mvp_slice.bats`):
+
+- [ ] `liquid workspace create <name>`
+- [ ] `liquid auth provision-agent <name> --workspace <id> --role <role>`
+- [ ] `liquid auth token` — print a session token
+- [ ] `liquid page write <page-path> --workspace <id> --data <json>`
+      *or* `--file <json-file>` (one of the two; pick `--data` to match §12)
+- [ ] `liquid page read <page-path> --workspace <id>`
+- [ ] `liquid audit list --workspace <id>` — read-only view of the
+      `op_log.jsonl` produced by `FilesystemContentStore`, filterable by
+      principal/action/since
+- [ ] `liquid page undo <page-path> --op <operation-id>`
+
+Authentication: token from `LIQUID_TOKEN` env var or `~/.liquid/token`.
+Every command validates the token against `IdentityProvider` before
+executing, and every write/undo command runs `require_permission!`
+against the resolved principal before mutating anything (Absolute
+Rule 4). Output respects `--format text|json` (§12).
+
+**Success criterion (MVP slice):** `bats tests/cli/00_mvp_slice.bats`
+passes — i.e. a shell script provisions an agent token, creates a
+workspace, writes a page, reads it back, prints the audit log entry
+for the write, undoes the write, and re-reads the page to confirm the
+undo. Tracks the same data path the Flutter shell will eventually
+display.
+
+---
+
+### 5.7 Milestone 6 — Flutter shell skeleton (week 11–14)
 
 **State management:** Riverpod. Use `AsyncNotifierProvider` for any state that
 involves a Rust FFI call. UI state (hover, focus, animation) uses `StateProvider`
@@ -588,48 +631,7 @@ a page, see the grid, drag the placeholder item, and resize it.
 
 ---
 
-### 5.7 Milestone 6.5 — Minimal agent CLI (week 11–13)
-
-> **Why a `.5` milestone?** Project Absolute Rule 6 (`CLAUDE.md`) requires
-> the data path to be exercisable via CLI before any UI work begins. M6
-> (Flutter shell skeleton) is the first UI-bearing milestone in Phase 1,
-> so the minimum CLI surface needed to drive the *MVP slice* — workspace
-> create → provision-agent → page write → page read → audit → undo —
-> must land before M6 work starts. This milestone carves that minimum
-> out of the original M7 so the gate is unambiguous; the rest of the
-> §12 surface ships in M7.
-
-See [§12 Agent CLI Specification](#12-agent-cli-specification) for the full
-command grammar. M6.5 implements only the slice that unblocks the
-MVP-slice acceptance test (`tests/cli/00_mvp_slice.bats`):
-
-- [ ] `liquid workspace create <name>`
-- [ ] `liquid auth provision-agent <name> --workspace <id> --role <role>`
-- [ ] `liquid auth token` — print a session token
-- [ ] `liquid page write <page-path> --workspace <id> --data <json>`
-      *or* `--file <json-file>` (one of the two; pick `--data` to match §12)
-- [ ] `liquid page read <page-path> --workspace <id>`
-- [ ] `liquid audit list --workspace <id>` — read-only view of the
-      `op_log.jsonl` produced by `FilesystemContentStore`, filterable by
-      principal/action/since
-- [ ] `liquid page undo <page-path> --op <operation-id>`
-
-Authentication: token from `LIQUID_TOKEN` env var or `~/.liquid/token`.
-Every command validates the token against `IdentityProvider` before
-executing, and every write/undo command runs `require_permission!`
-against the resolved principal before mutating anything (Absolute
-Rule 4). Output respects `--format text|json` (§12).
-
-**Success criterion (MVP slice):** `bats tests/cli/00_mvp_slice.bats`
-passes — i.e. a shell script provisions an agent token, creates a
-workspace, writes a page, reads it back, prints the audit log entry
-for the write, undoes the write, and re-reads the page to confirm the
-undo. Tracks the same data path the Flutter shell will eventually
-display.
-
----
-
-### 5.8 Milestone 7 — Full agent CLI (week 13–16)
+### 5.8 Milestone 7 — Full agent CLI (week 14–16)
 
 The remainder of the §12 surface, layered on top of M6.5:
 
@@ -1380,8 +1382,9 @@ liquid page write <page-path> --data <json>
 liquid page history <page-path>
 liquid page undo <page-path> --op <operation-id>
 
-liquid audit list --workspace <id> [--principal <id>] [--action <a>] \
-                  [--since <iso-ts>]   # read-only op_log view (M6.5)
+liquid audit list [--principal <id>] [--action <a>] [--since <iso-ts>]
+                  # read-only op_log view (M6.5); --workspace is the
+                  # global flag declared above, not a per-command one.
 
 liquid app list
 liquid app install <app-id>@<version> --name <instance-name> \
