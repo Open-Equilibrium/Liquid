@@ -133,6 +133,10 @@ test-cli-filtered:
 ai-check:
     ./scripts/ai-check.sh
 
+# Sync-docs gate — milestone state agrees across README/TASKS/CHANGELOG/plan
+sync-docs-check:
+    ./scripts/sync-docs-check.sh
+
 # ── Combined ──────────────────────────────────────────────────────────────────
 
 # Run ALL tests across every layer

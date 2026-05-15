@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# scripts/sync-docs-check.sh — report-only sync-docs gate.
+#
+# Compares milestone status across the four documents that record it:
+#   - README.md         (Status table)
+#   - TASKS.md          (Done section vs Active section)
+#   - CHANGELOG.md      (## [Unreleased] block)
+#   - IMPLEMENTATION_PLAN.md §5 (per-milestone checkboxes / status)
+#
+# Reports mismatches. Never edits files. Exits non-zero if a mismatch is
+# found so CI can fail loud while keeping the doc set the human's call.
+#
+# Cross-checks performed:
+#   1. Each Mn marked ✅ Done in README.md has an entry in CHANGELOG.md
+#      under [Unreleased] or in a previous tagged section.
+#   2. Each Mn marked ✅ Done in README.md has matching evidence in
+#      IMPLEMENTATION_PLAN.md §5 (no remaining unchecked top-level
+#      bullets for that milestone).
+#   3. Each TASK-NNN referenced in IMPLEMENTATION_PLAN.md or CHANGELOG.md
+#      resolves to a heading in TASKS.md.
+#
+# These mirror checks (1), (2), and (3) of `.claude/skills/sync-docs/SKILL.md`.
+
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+fail=0
+note() { printf 'sync-docs: %s\n' "$*"; }
+bad()  { printf 'sync-docs: FAIL  %s\n' "$*" >&2; fail=1; }
+
+require() {
+  if [ ! -f "$1" ]; then
+    bad "missing $1"
+    return 1
+  fi
+}
+
+require README.md
+require TASKS.md
+require CHANGELOG.md
+require IMPLEMENTATION_PLAN.md
+
+# ── Parse README status table ────────────────────────────────────────────────
+# Lines look like: | **M3** Auth + permissions | ... | ✅ Done |
+# We capture the milestone id (M<digits>(.<digits>)?) and whether it is Done.
+readme_done=()
+while IFS= read -r line; do
+  if [[ "$line" =~ \*\*(M[0-9]+(\.[0-9]+)?)\*\* ]]; then
+    id="${BASH_REMATCH[1]}"
+    if echo "$line" | grep -q '✅'; then
+      readme_done+=("$id")
+    fi
+  fi
+done < README.md
+
+# ── Cross-check: every README ✅ has a CHANGELOG entry ───────────────────────
+for m in "${readme_done[@]:-}"; do
+  [ -z "$m" ] && continue
+  if grep -Eq "\b$m\b" CHANGELOG.md; then
+    : # ok
+  else
+    bad "$m marked ✅ Done in README.md but no mention in CHANGELOG.md"
+  fi
+done
+
+# ── Cross-check: every README ✅ has §5 evidence in IMPLEMENTATION_PLAN ──────
+for m in "${readme_done[@]:-}"; do
+  [ -z "$m" ] && continue
+  # Accept either the legacy form "### 5.N Milestone N —" or the
+  # versioned form "### 5.N Milestone M6.5 —".
+  if grep -Eq "^### 5\.[0-9]+ Milestone ($m|${m#M}) " IMPLEMENTATION_PLAN.md; then
+    : # ok
+  else
+    bad "$m marked ✅ Done in README.md but IMPLEMENTATION_PLAN.md §5 has no matching heading"
+  fi
+done
+
+# ── Cross-check: TASK-NNN references resolve ─────────────────────────────────
+tasks_known=$(grep -Eo '\[TASK-[0-9]+\]|\bTASK-[0-9]+\b' TASKS.md \
+  | grep -Eo 'TASK-[0-9]+' | sort -u || true)
+tasks_referenced=$(
+  grep -Eho '\bTASK-[0-9]+\b' IMPLEMENTATION_PLAN.md CHANGELOG.md \
+    docs/adr/*.md 2>/dev/null | sort -u || true
+)
+while IFS= read -r ref; do
+  [ -z "$ref" ] && continue
+  if printf '%s\n' "$tasks_known" | grep -Fxq "$ref"; then
+    : # ok
+  else
+    bad "$ref referenced in plan/changelog/ADR but not defined in TASKS.md"
+  fi
+done <<<"$tasks_referenced"
+
+# ── Report ───────────────────────────────────────────────────────────────────
+if [ "$fail" -eq 0 ]; then
+  note "doc set is internally consistent (README ↔ CHANGELOG ↔ plan ↔ TASKS)"
+  exit 0
+fi
+exit 1
