@@ -16,7 +16,12 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/open-equilibrium/liquid"
-rust-version = "1.78"
+# Minimum Supported Rust Version. Kept in lock-step with:
+#   - core/rust-toolchain.toml  (toolchain pin used by `rustup` locally)
+#   - .github/workflows/ci.yml  (dtolnay/rust-toolchain @master `toolchain:`)
+# Bump all three together; never let CI drift to "stable". See CLAUDE.md
+# "Cloud notes" for the policy.
+rust-version = "1.94"
 
 [workspace.dependencies]
 liquid-core = { path = "liquid-core" }
