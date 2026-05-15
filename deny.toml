@@ -1,0 +1,87 @@
+# cargo-deny configuration for the Liquid Rust workspace.
+#
+# Run from `core/` (or via `cd core && cargo deny --config ../deny.toml check`):
+#
+#     cd core && cargo deny --config ../deny.toml check
+#
+# CI runs the same command in .github/workflows/audit.yml weekly and on
+# every Cargo.lock change so a new dependency cannot smuggle in a
+# GPL-licensed crate or a fresh advisory without us noticing.
+
+[graph]
+# Limit checks to the workspace's actual target set. The Flutter shell
+# pulls in extra targets later; expand this list when it does.
+all-features = false
+no-default-features = false
+
+# ── Vulnerability advisories ─────────────────────────────────────────────────
+[advisories]
+version = 2
+# CI fails on any advisory matching the workspace's dependency graph.
+yanked = "deny"
+ignore = []
+# `db-path` and `db-urls` default to the official rustsec database.
+
+# ── License policy ───────────────────────────────────────────────────────────
+# Policy: Liquid is shipped under Apache-2.0 (see LICENSE). Transitive
+# dependencies must therefore use a license that is *compatible* with our
+# Apache-2.0 release. We allow:
+#
+#   - Apache-2.0 (matches the project license)
+#   - MIT / BSD-2/3-Clause / ISC (permissive, fully compatible with Apache-2.0)
+#   - Unicode-DFS-2016 / Unicode-3.0 (used by `unicode-ident` and friends)
+#   - Zlib (used by some byte-twiddling crates)
+#
+# We deny *every* copyleft license outright — GPL/LGPL/AGPL/MPL/CC* require
+# additional release-time effort that pre-1.0 Liquid is not equipped to
+# absorb. The deny list below is explicit so a future contributor can see
+# why a particular crate was rejected.
+[licenses]
+version = 2
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+]
+confidence-threshold = 0.93
+exceptions = []
+
+# Explicitly reject the entire copyleft family. cargo-deny would already
+# refuse anything outside `allow`; listing them explicitly makes the
+# intent obvious to future readers.
+[[licenses.clarify]]
+name = "ring"
+expression = "MIT AND ISC AND OpenSSL"
+license-files = [
+    { path = "LICENSE", hash = 0xbd0eed23 },
+]
+
+# ── Bans: duplicate semver-major versions ────────────────────────────────────
+# Same-major duplicates inflate compile time, bloat the binary, and almost
+# always indicate that a dependency hasn't been bumped consistently. We
+# fail on them so the human has to make an explicit decision.
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+highlight = "all"
+allow = []
+deny = [
+    # Copyleft family — belt and braces alongside the license filter.
+    { name = "openssl-sys" },     # we use rustls-based stacks
+]
+skip = []
+skip-tree = []
+
+# ── Source policy ────────────────────────────────────────────────────────────
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

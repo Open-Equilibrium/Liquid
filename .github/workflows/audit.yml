@@ -1,0 +1,84 @@
+name: Audit
+
+on:
+  # Weekly sweep so newly-published RUSTSEC advisories show up even if
+  # no Cargo.lock change has happened.
+  schedule:
+    - cron: '17 6 * * 1'  # Mondays at 06:17 UTC
+
+  # Fire on any Cargo.lock change so a new transitive dependency cannot
+  # slip in a fresh advisory or a non-permissive license.
+  push:
+    branches: [main]
+    paths:
+      - 'core/Cargo.lock'
+      - 'core/Cargo.toml'
+      - 'core/**/Cargo.toml'
+      - 'deny.toml'
+      - '.github/workflows/audit.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'core/Cargo.lock'
+      - 'core/Cargo.toml'
+      - 'core/**/Cargo.toml'
+      - 'deny.toml'
+      - '.github/workflows/audit.yml'
+
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain (pinned)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.94.1
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      - name: Install cargo-audit
+        run: cargo install --locked cargo-audit
+
+      - name: Run cargo audit
+        run: cargo audit --deny warnings
+
+  cargo-deny:
+    name: cargo deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain (pinned)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.94.1
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      - name: Run cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: core/Cargo.toml
+          arguments: --config ../deny.toml --all-features
+          command: check
