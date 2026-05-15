@@ -1,0 +1,51 @@
+    Compiling liquid-core v0.1.0 (/home/user/Liquid/core/liquid-core)
+    Compiling liquid-vcs v0.1.0 (/home/user/Liquid/core/liquid-vcs)
+warning: unused variable: `unused_handle`
+  --> liquid-vcs/src/store.rs:42:9
+   |
+42 |     let unused_handle = open_handle()?;
+   |         ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_unused_handle`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+error[E0277]: the trait bound `String: PartialEq<&str>` is not satisfied
+  --> liquid-vcs/src/store.rs:88:23
+   |
+88 |     assert_eq!(name == "agent", true);
+   |                       ^^ no implementation for `String == &str`
+
+    Finished test [unoptimized + debuginfo] target(s) in 8.42s
+     Running unittests src/lib.rs (target/debug/deps/liquid_vcs-deadbeef)
+
+running 12 tests
+test store::tests::writes_then_reads ... ok
+test store::tests::read_unknown_path ... ok
+test store::tests::operation_log_orders_writes ... ok
+test store::tests::undo_removes_last_write ... FAILED
+test store::tests::undo_is_idempotent ... ok
+test store::tests::write_then_overwrite ... ok
+test store::tests::list_returns_sorted ... ok
+test store::tests::workspace_isolation ... ok
+test store::tests::persists_across_instances ... ok
+test store::tests::atomic_write_survives_crash ... ok
+test store::tests::content_hash_matches_payload ... ok
+test store::tests::handles_unicode_paths ... ok
+
+failures:
+
+---- store::tests::undo_removes_last_write stdout ----
+thread 'store::tests::undo_removes_last_write' panicked at 'assertion failed: store.read(&path).is_err()',
+liquid-vcs/src/store.rs:201:9
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+stack backtrace:
+   0: rust_begin_unwind
+   1: core::panicking::panic_fmt
+   2: liquid_vcs::store::tests::undo_removes_last_write
+
+failures:
+    store::tests::undo_removes_last_write
+
+test result: FAILED. 11 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+
+error: test failed, to rerun pass `-p liquid-vcs --lib`

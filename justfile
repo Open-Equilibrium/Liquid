@@ -109,6 +109,12 @@ fmt-sdk:
 test-cli:
     bats tests/cli/
 
+# ── Repo-local Claude Code config ─────────────────────────────────────────────
+
+# Sanity-check .claude/ configuration (settings, hooks, CLAUDE.md refs)
+ai-check:
+    ./scripts/ai-check.sh
+
 # ── Combined ──────────────────────────────────────────────────────────────────
 
 # Run ALL tests across every layer
