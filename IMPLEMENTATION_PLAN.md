@@ -588,28 +588,67 @@ a page, see the grid, drag the placeholder item, and resize it.
 
 ---
 
-### 5.7 Milestone 7 — Agent CLI (week 12–16)
+### 5.7 Milestone 6.5 — Minimal agent CLI (week 11–13)
+
+> **Why a `.5` milestone?** Project Absolute Rule 6 (`CLAUDE.md`) requires
+> the data path to be exercisable via CLI before any UI work begins. M6
+> (Flutter shell skeleton) is the first UI-bearing milestone in Phase 1,
+> so the minimum CLI surface needed to drive the *MVP slice* — workspace
+> create → provision-agent → page write → page read → audit → undo —
+> must land before M6 work starts. This milestone carves that minimum
+> out of the original M7 so the gate is unambiguous; the rest of the
+> §12 surface ships in M7.
 
 See [§12 Agent CLI Specification](#12-agent-cli-specification) for the full
-command grammar. Phase 1 implements the following subset:
+command grammar. M6.5 implements only the slice that unblocks the
+MVP-slice acceptance test (`tests/cli/00_mvp_slice.bats`):
 
 - [ ] `liquid workspace create <name>`
-- [ ] `liquid workspace list`
-- [ ] `liquid page read <page-path> --workspace <id>`
-- [ ] `liquid page write <page-path> --workspace <id> --file <json-file>`
 - [ ] `liquid auth provision-agent <name> --workspace <id> --role <role>`
-- [ ] `liquid auth token` — print a session token for the current user/agent
+- [ ] `liquid auth token` — print a session token
+- [ ] `liquid page write <page-path> --workspace <id> --data <json>`
+      *or* `--file <json-file>` (one of the two; pick `--data` to match §12)
+- [ ] `liquid page read <page-path> --workspace <id>`
+- [ ] `liquid audit list --workspace <id>` — read-only view of the
+      `op_log.jsonl` produced by `FilesystemContentStore`, filterable by
+      principal/action/since
+- [ ] `liquid page undo <page-path> --op <operation-id>`
 
-Authentication: token read from `LIQUID_TOKEN` env var or `~/.liquid/token`.
-Every command validates the token against `IdentityProvider` before executing.
-Every write command logs the commit to stdout on success.
+Authentication: token from `LIQUID_TOKEN` env var or `~/.liquid/token`.
+Every command validates the token against `IdentityProvider` before
+executing, and every write/undo command runs `require_permission!`
+against the resolved principal before mutating anything (Absolute
+Rule 4). Output respects `--format text|json` (§12).
 
-**Success criterion:** Shell script provisions an agent, uses the token to write
-a page, reads it back, and asserts the content matches.
+**Success criterion (MVP slice):** `bats tests/cli/00_mvp_slice.bats`
+passes — i.e. a shell script provisions an agent token, creates a
+workspace, writes a page, reads it back, prints the audit log entry
+for the write, undoes the write, and re-reads the page to confirm the
+undo. Tracks the same data path the Flutter shell will eventually
+display.
 
 ---
 
-### 5.8 Phase 1 Exit Criteria
+### 5.8 Milestone 7 — Full agent CLI (week 13–16)
+
+The remainder of the §12 surface, layered on top of M6.5:
+
+- [ ] `liquid workspace list` (`--format json`)
+- [ ] `liquid workspace delete <id>`
+- [ ] `liquid page history <page-path>` (paginated)
+- [ ] `liquid auth login` (interactive; writes `~/.liquid/token`)
+- [ ] `liquid auth whoami`
+- [ ] `liquid app list / install / uninstall`
+- [ ] `liquid app <instance-name> read|write|slot subscribe|slot publish`
+- [ ] `--as <agent-name>` impersonation flag (still requires matching token)
+
+**Success criterion:** every command in §12 is reachable from the CLI;
+each one has a matching bats happy-path test under `tests/cli/`; every
+mutation runs `require_permission!` first.
+
+---
+
+### 5.9 Phase 1 Exit Criteria
 
 - [ ] Desktop app runs on Linux, Windows, and macOS from a single `flutter build` command
 - [ ] A developer can create a workspace, open a page, place a placeholder grid item
@@ -1316,6 +1355,9 @@ liquid page read <page-path>
 liquid page write <page-path> --data <json>
 liquid page history <page-path>
 liquid page undo <page-path> --op <operation-id>
+
+liquid audit list --workspace <id> [--principal <id>] [--action <a>] \
+                  [--since <iso-ts>]   # read-only op_log view (M6.5)
 
 liquid app list
 liquid app install <app-id>@<version> --name <instance-name> \

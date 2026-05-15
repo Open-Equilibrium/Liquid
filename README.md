@@ -28,7 +28,8 @@ SDK, and reference apps land in subsequent phases.
 | **M4** Cache layer stub | `InProcessCache` behind `ReadCache` trait | 🔜 Next |
 | **M5** FFI bridge | `flutter_rust_bridge` surface | Planned |
 | **M6** Flutter shell skeleton | `RootShell`, `ExplorerPanel`, `PageGrid` | Planned |
-| **M7** Agent CLI | `liquid workspace`, `liquid page`, `liquid auth` | Planned |
+| **M6.5** Minimal agent CLI (gates M6 per CLAUDE.md rule 6) | `liquid workspace create`, `page read/write/undo`, `auth provision-agent/token`, `audit list` — drives the MVP slice (`tests/cli/00_mvp_slice.bats`) | Planned |
+| **M7** Full agent CLI | Rest of [§12](IMPLEMENTATION_PLAN.md#12-agent-cli-specification): `workspace list/delete`, `page history`, `auth login/whoami`, `app …` | Planned |
 | Phases 2–4 | SDK, first-party apps, mobile, scale, ecosystem | See [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) |
 
 The full milestone breakdown lives in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md);
