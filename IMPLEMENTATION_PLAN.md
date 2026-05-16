@@ -462,10 +462,16 @@ data back.
 
 ### 5.3 Milestone 3 — Auth + permissions (week 5–8)
 
-The trait shapes here reflect ADR-002 (M3 trait scoping): in-memory
-backends ship now, disk-backed variants are deferred, and the original
-§4.2 / §4.5 drafts are simplified to drop Phase-3-only surface
-(`grant`, `RoleId`, workspace-bound tokens).
+The trait shapes here reflect ADR-002 (M3 trait scoping): the
+original §4.2 / §4.5 drafts are simplified to drop Phase-3-only
+surface (`grant`, `RoleId`, workspace-bound tokens). Phase-1 ships
+durable disk-backed variants for both sides — `LocalIdentityProvider`
+writes `users.toml` / `agents.toml`; `FilesystemPermissionIndex`
+(TASK-007) writes one `permissions.toml` per workspace under
+`<root>/workspaces/<id>/`. Manual validation: see
+[`docs/manual-validation-m1-m3.md`](docs/manual-validation-m1-m3.md)
+and the runnable examples under `core/liquid-vcs/examples/` +
+`core/liquid-permissions/examples/`.
 
 - [x] Implement `LocalIdentityProvider` in `liquid-auth` (TASK-006):
   - Users stored as hashed credentials in `<root>/users.toml` (Argon2id

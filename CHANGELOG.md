@@ -18,6 +18,37 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Documentation
+
+- `docs/manual-validation-m1-m3.md` (new) — Phase-1 manual
+  validation guide covering M1 (`liquid-core` primitives), M2
+  (VCS layer + on-disk ADR-001 layout inspection), and M3
+  (auth + permissions + Argon2id hash check + no-mode-leak
+  token surface). Walks a human reviewer through focused
+  `cargo test` commands, the new walkthrough examples, and the
+  per-milestone on-disk inspection. Closes the sign-off-checklist
+  gap that previously left "Phase 1 release ready?" answerable
+  only by the author.
+- `core/liquid-vcs/examples/m2_walkthrough.rs` (new) — runnable,
+  self-asserting reproduction of the M2 plan-level success
+  criterion (`workspace create → write three → read back → list →
+  op-log → undo → NotFound`). Leaves artifacts under
+  `$(temp_dir)/liquid-m2-walkthrough/` for `ls -la` /
+  `cat op_log.jsonl` inspection.
+- `core/liquid-permissions/examples/m3_walkthrough.rs` (new) —
+  runnable demonstration of the M3 success criterion against
+  *both* `InMemoryPermissionIndex` and `FilesystemPermissionIndex`,
+  with the disk-persistence re-open test plus the four-way token
+  negative surface (tampered / wrong-key / expired / malformed →
+  all `Forbidden`). Leaves Argon2id-hashed `users.toml`,
+  `agents.toml`, and `permissions.toml` under
+  `$(temp_dir)/liquid-m3-walkthrough/` for inspection.
+- `IMPLEMENTATION_PLAN.md` §5.3 prose updated to match shipped
+  state: dropped the stale "disk-backed variants are deferred"
+  claim (TASK-007 shipped `FilesystemPermissionIndex` and
+  TASK-006 shipped the disk-backed `LocalIdentityProvider`).
+  Added a forward link to the new manual-validation guide.
+
 ### Fixed
 
 - `.claude/scripts/gh-job-log`:
