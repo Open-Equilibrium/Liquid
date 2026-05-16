@@ -258,9 +258,10 @@ Plus `BridgeServices::delete_workspace` (gated by
 + `find_agent_by_principal` (drives the `--as` lookup).
 
 **Acceptance criteria.**
-- [x] `bats tests/cli/11_m7_full_cli.bats` is green (13 / 13 —
-      workspace list / delete, page history, auth login / whoami,
-      --as impersonation happy + negative paths).
+- [x] `bats tests/cli/11_m7_full_cli.bats` is green (16 / 16 —
+      workspace list / delete, page history (incl. `--limit > matches`),
+      auth login / whoami (incl. duplicate `--register`), `--as`
+      impersonation happy + unknown + ambiguous-name paths).
 - [x] Every mutating subcommand runs `require_permission!` first
       (directly or via the bridge's
       `delete_workspace` / `create_workspace` arms).
@@ -301,7 +302,7 @@ emit maps `OperationKind::{Create,Update}` to the user-visible
       after dropping every `skip "pending M6.5"`.
 - [x] Every subcommand has a focused bats test covering the happy
       path and at least one auth-failure / negative path
-      (`tests/cli/10_cli_subcommands.bats`, 13 cases).
+      (`tests/cli/10_cli_subcommands.bats`, 16 cases).
 - [x] No `unwrap()` / `expect()` outside `#[cfg(test)]`.
 - [x] `IMPLEMENTATION_PLAN.md §12` grammar matches every shipped
       subcommand; §5.6 ticks every checkbox; §9 `liquid-cli`

@@ -16,6 +16,10 @@ liquid-vcs.workspace = true
 liquid-auth.workspace = true
 liquid-permissions.workspace = true
 liquid-cache.workspace = true
+# Forward-declared for TASK-012 (`publish_slot` / `subscribe_slot`
+# / `wire_slots` / `load_bindings` FFI entry points). Compiles as an
+# unused dep today; remove this comment when the first
+# `use liquid_bindings::…` lands.
 liquid-bindings.workspace = true
 
 async-trait.workspace = true

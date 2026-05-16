@@ -834,7 +834,10 @@ The remainder of the §12 surface, layered on top of M6.5:
 
 **Success criterion:** every shipped command has a matching bats
 happy-path + negative-path test under `tests/cli/11_m7_full_cli.bats`
-(13 cases). The `app …` subset that depends on M8 is tracked as
+(16 cases — 13 shipped with M7 plus 3 PR #18 audit-pass
+regressions for duplicate `auth login --register`, ambiguous
+`--as`, and `page history --limit > matches`). The `app …`
+subset that depends on M8 is tracked as
 TASK-014 (Planned). Every mutating CLI handler runs
 `require_permission!` (directly or via `BridgeServices::*`) before
 any state-touching call (Absolute Rule 4).
@@ -970,11 +973,12 @@ structural-equality regressions, manifest round-trips).
 
 **Success criterion (Rust side):** ✅ Shipped — the 12 inline
 `SlotBroker` tests in `core/liquid-bindings/src/broker.rs` cover
-publish-no-subscribers / publish-then-receive / fan-out via wire
-/ self-wire rejection / idempotent re-wiring / 2-hop cycle
-rejection (`wire`) / 3-hop cycle rejection (`wire`) / save→load
-round-trip surviving a fresh broker instance / load rejecting
-self-wires / load rejecting multi-hop cycles. End-to-end
+publish-no-subscribers / publish-then-receive (single subscriber)
+/ two-subscribers fan-out / fan-out via wire / self-wire rejection
+/ idempotent re-wiring / 2-hop cycle rejection (`wire`) / 3-hop
+cycle rejection (`wire`) / save→load round-trip surviving a fresh
+broker instance / load rejecting self-wires / load rejecting
+multi-hop cycles / `BindingsDocument` JSON round-trip. End-to-end
 "Spreadsheet emits → Chart updates" demonstration ships with
 TASK-012 (Dart side).
 

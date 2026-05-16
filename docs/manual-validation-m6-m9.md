@@ -105,7 +105,7 @@ is skipped in the cloud session per CLAUDE.md.
 ## M7 — Full agent CLI (`liquid-cli` extensions)
 
 **Spec:** `IMPLEMENTATION_PLAN.md §5.8`. **Success criterion:**
-`bats tests/cli/11_m7_full_cli.bats` reports 13 / 13. The
+`bats tests/cli/11_m7_full_cli.bats` reports 16 / 16. The
 `app …` subset is carved out to TASK-014 (depends on M8's
 `AppManifest`).
 
@@ -115,14 +115,20 @@ is skipped in the cloud session per CLAUDE.md.
 bats tests/cli/11_m7_full_cli.bats 2>&1 | tail -20
 ```
 
-**Expected:** 13 / 13 cases. Coverage breakdown:
+**Expected:** 16 / 16 cases. Coverage breakdown:
 - workspace list — empty + 2-workspace happy path (2 cases)
 - workspace delete — happy + non-owner Forbidden + unknown id
   Forbidden (3 cases)
-- page history — happy + `--limit` (2 cases)
-- auth login — happy + wrong-password Forbidden (2 cases)
+- page history — happy + `--limit` cap + `--limit > matches`
+  per-path cap (3 cases — the third is a PR #18 audit-pass
+  regression for path-filter semantics)
+- auth login — happy + wrong-password Forbidden + duplicate
+  `--register` InvalidInput (3 cases — the third is a PR #18
+  audit-pass regression for username uniqueness)
 - auth whoami — happy + no-token InvalidInput (2 cases)
-- `--as` — happy + unknown-name NotFound (2 cases)
+- `--as` — happy + unknown-name NotFound + ambiguous-name
+  InvalidInput (3 cases — the third is a PR #18 audit-pass
+  regression for cross-workspace name collisions)
 
 ### Step M7.2 — Manual sanity walkthrough
 
@@ -268,20 +274,25 @@ If this fails, page-reload wiring is broken — block the merge.
 Tick every box before stamping the run-log:
 
 - [ ] M6 — `flutter test` 4 / 4; `flutter analyze` clean.
-- [ ] M7 — `bats tests/cli/11_m7_full_cli.bats` 13 / 13;
+- [ ] M7 — `bats tests/cli/11_m7_full_cli.bats` 16 / 16
+      (13 shipped with M7 + 3 PR #18 audit regressions);
       anti-enumeration sanity (§M7.3) returns `Forbidden`
       not `Not found`.
-- [ ] M8 — `flutter test` 6 / 6 in `sdk/liquid_sdk/`;
-      `flutter analyze` clean; `SlotValue` variant parity
-      between Rust + Dart.
-- [ ] M9 Rust side — 9 / 9 inline tests;
-      `save_then_load_round_trips_the_wiring_document` green.
+- [ ] M8 — `flutter test` 8 / 8 in `sdk/liquid_sdk/`
+      (6 shipped + 2 `SlotValue.json` / `SlotValue.bytes`
+      structural-equality regressions); `flutter analyze` clean;
+      `SlotValue` variant parity between Rust + Dart.
+- [ ] M9 Rust side — 12 / 12 inline tests (9 shipped + 2-hop
+      + 3-hop `wire` cycle rejection + multi-hop `load_bindings`
+      cycle rejection); `save_then_load_round_trips_the_wiring_document`
+      green.
 - [ ] M9 Dart side — STATUS still PENDING (TASK-012 + TASK-016b).
 - [ ] Cross-milestone — `cargo test --workspace --locked`
       green; `cargo clippy --workspace --all-targets --locked --
       -D warnings` clean; `cargo fmt --all --check` clean;
       `cargo deny check` clean; `just coverage-check` clean.
-- [ ] `bats tests/cli/` full suite passes (117 / 117 after M7).
+- [ ] `bats tests/cli/` full suite passes (120 / 120 after the
+      PR #18 audit-pass regressions).
 
 If any line above is unchecked, the milestone is **not** done.
 

@@ -137,15 +137,41 @@ generation, blocked on TASK-012).
   `Filesystem` impls. `Filesystem` round-trips through
   `flush_locked` so the on-disk `workspaces.toml` reflects the
   removal atomically.
-- `tests/cli/11_m7_full_cli.bats` (new, 13 cases) covers every
+- `tests/cli/11_m7_full_cli.bats` (new, 16 cases) covers every
   shipped subcommand's happy path + at least one negative path
-  (Forbidden / NotFound / InvalidInput as appropriate).
+  (Forbidden / NotFound / InvalidInput as appropriate). Three of
+  the 16 are PR #18 audit-pass regressions for
+  `auth login --register` username collisions, ambiguous `--as`
+  name disambiguation, and `page history --limit > matches`.
 
 **Carved out:** `liquid app list / install / uninstall` +
 `liquid app <instance-name> read / write / slot subscribe / slot
 publish` deferred to TASK-014 (planned, blocked on M8 —
 `AppManifest`). The §5.8 spec checkboxes for those rows stay
 unticked with an inline pointer.
+
+### Fixed — Post-M6-M9 audit (PR #18 review pass, round 5)
+
+- Bats-test count corrections that round 4 missed:
+  `tests/cli/11_m7_full_cli.bats` is now `16 / 16` everywhere
+  it appears (was `13 / 13` in `CHANGELOG.md`, `TASKS.md`,
+  `IMPLEMENTATION_PLAN.md §5.8`, and the M6-M9 manual-validation
+  guide); `tests/cli/10_cli_subcommands.bats` is now `16 cases`
+  in `TASKS.md` (was `13 cases`, while
+  `IMPLEMENTATION_PLAN.md §5.6` already had the correct count).
+  The cross-suite total in `docs/manual-validation-m6-m9.md`
+  sign-off checklist is `120 / 120` (was `117 / 117`).
+- `IMPLEMENTATION_PLAN.md §6.2` success-criterion enumeration:
+  appended the two `SlotBroker` test scenarios the slash-separated
+  list was missing (`two-subscribers fan-out`,
+  `BindingsDocument JSON round-trip`) so the enumeration matches
+  the `12 inline` count.
+- `core/liquid-sdk-bridge/Cargo.toml`: annotated the forward-
+  declared `liquid-bindings` workspace dependency with a comment
+  explaining it is the placeholder for TASK-012's
+  `publish_slot` / `subscribe_slot` / `wire_slots` /
+  `load_bindings` FFI entry points, so a future maintainer
+  cannot mistake it for an unused dep ready to be culled.
 
 ### Fixed — Post-M6-M9 audit (PR #18 review pass, round 4)
 
@@ -341,7 +367,7 @@ clippy clean; fmt clean.
   6 / 6 cases pass end-to-end against the shipped binary
   (workspace create → provision-agent → page write/read → audit
   list → page undo → AppViewer-cannot-write negative).
-- `tests/cli/10_cli_subcommands.bats` (new, 13 cases) covers per-
+- `tests/cli/10_cli_subcommands.bats` (new, 16 cases) covers per-
   subcommand edge cases the MVP slice does not: `--version`, no-
   args help-exit, bootstrap files (secret + token), registry
   cross-process persistence, `auth token` happy + no-token,
