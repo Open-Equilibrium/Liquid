@@ -13,10 +13,12 @@
 //! target signatures and labels the Phase-2 deviation explicitly;
 //! the alignment work lands together with the Phase-4 distributed
 //! backend (M18) so cross-workspace + cross-process isolation is
-//! enforced in one place. For the single-process Phase-2 backend,
-//! the CLI drives exactly one workspace at a time and apps already
-//! namespace their slots (e.g. `sheet:selectedRange`,
-//! `chart:data`), so the flat keyspace is safe — it does *not*
+//! enforced in one place. For the single-process Phase-2 backend
+//! the broker is hosted inside the Flutter app process (the agent
+//! CLI never instantiates it), and the app holds exactly one
+//! workspace open at a time; combined with the namespacing apps
+//! already do on their slots (e.g. `sheet:selectedRange`,
+//! `chart:data`), the flat keyspace is safe — it does *not*
 //! claim to be safe for the distributed shape, which is what
 //! TASK-020 has to fix before any cross-tenant broker traffic is
 //! ever exchanged.

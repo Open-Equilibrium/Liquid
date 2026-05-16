@@ -150,6 +150,26 @@ publish` deferred to TASK-014 (planned, blocked on M8 —
 `AppManifest`). The §5.8 spec checkboxes for those rows stay
 unticked with an inline pointer.
 
+### Fixed — Post-M6-M9 audit (PR #18 review pass, round 7)
+
+- `TASKS.md`: added the missing **TASK-011a** heading
+  (`AES-256-GCM encryption helper crate`). The entry was referenced
+  on TASK-017's `Blocked by:` line for several rounds but had no
+  definition — a contributor picking up M10 could not discover what
+  TASK-011a required them to build first. The new entry specifies
+  the three-function surface (`derive_key` / `encrypt` / `decrypt`),
+  the Argon2id parameter pinning, the anti-enumeration single-error
+  return shape, and the per-crate test gates.
+- `core/liquid-bindings/src/broker.rs`,
+  `IMPLEMENTATION_PLAN.md §4.4`, and the matching round-3 CHANGELOG
+  bullet: corrected the actor that justifies the Phase-2 flat
+  `SlotName` keyspace. The previous text said "the CLI drives
+  exactly one workspace at a time" but the agent CLI never
+  instantiates `InProcessSlotBroker`; the broker is hosted inside
+  the Flutter app process. Rewording avoids confusing a future
+  Absolute-Rule-5 audit into searching the CLI for a missing
+  workspace scope that was never there.
+
 ### Fixed — Post-M6-M9 audit (PR #18 review pass, round 6)
 
 - `docs/manual-validation-m6-m9.md` Step M8.1 expected `6 / 6` →
@@ -218,8 +238,10 @@ unticked with an inline pointer.
   `workspace: WorkspaceId`, `instance: AppInstanceId`, and
   `subscriber: PrincipalId` arms the target spec lists. The flat
   `SlotName` keyspace is safe for the single-process Phase-2 backend
-  (the CLI drives one workspace at a time and apps already namespace
-  their slots); the workspace+instance+principal-aware shape lands
+  (the broker runs inside the Flutter app process — the agent CLI
+  never instantiates it — and the app holds exactly one workspace
+  open at a time, with apps already namespacing their slots); the
+  workspace+instance+principal-aware shape lands
   with the Phase-4 distributed backend under **TASK-020** so the
   cross-tenant isolation contract is enforced in one place. The
   broker module docstring + a new TASK-020 entry in `TASKS.md`

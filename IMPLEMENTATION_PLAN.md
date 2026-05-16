@@ -357,9 +357,11 @@ pub trait ReadCache: Send + Sync {
 > `wired_by: PrincipalId` parameters, returns `LiquidError` (not a
 > dedicated `BrokerError`), and uses a tokio `broadcast::Receiver`
 > (not a `BoxStream`). The flat `SlotName` keyspace is acceptable
-> for the single-process Phase-2 backend because the CLI process
-> drives exactly one workspace at a time and apps already namespace
-> their slots (`sheet:selectedRange`, `chart:data`). The
+> for the single-process Phase-2 backend because the broker is
+> hosted inside the Flutter app process (the agent CLI never
+> instantiates it) and the app holds exactly one workspace open at
+> a time; apps already namespace their slots
+> (`sheet:selectedRange`, `chart:data`). The
 > workspace + instance + principal-aware target signatures land
 > together with the Phase-4 distributed backend (M18) under
 > **TASK-020** so the cross-workspace and cross-process isolation

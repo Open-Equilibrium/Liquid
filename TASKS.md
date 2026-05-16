@@ -77,6 +77,43 @@ which translates to `liquid-bindings::InProcessSlotBroker::wire`
 `.liquid/pages/<page_id>/bindings.json` so wiring survives a page
 reload.
 
+### [TASK-011a] AES-256-GCM encryption helper crate
+
+**Phase:** 2
+**Milestone:** M5 follow-up / M10 prerequisite
+(`IMPLEMENTATION_PLAN.md §6.3` — declared on TASK-017's
+`Blocked by` line so M10 cannot start without it).
+**Status:** Planned
+**Blocked by:** None (small leaf utility).
+
+**What.** Small helper crate (likely `liquid-crypto`) that
+exposes:
+
+- `derive_key(password: &str, salt: &[u8; 16]) -> [u8; 32]` —
+  Argon2id with the project-pinned parameters
+  (`memory = 64 MiB`, `iterations = 3`, `parallelism = 1`,
+  matching `liquid-auth`'s password hash so callers can reuse
+  the existing parameter constants).
+- `encrypt(plaintext: &[u8], key: &[u8; 32]) -> Vec<u8>` —
+  AES-256-GCM with a per-message random nonce; output is
+  `nonce || ciphertext || tag` (12 + N + 16 bytes).
+- `decrypt(envelope: &[u8], key: &[u8; 32]) -> Result<Vec<u8>>`
+  — inverse of `encrypt`; returns `InvalidInput` on every
+  failure mode (wrong key, truncated envelope, tampered tag)
+  so the caller cannot tell which mode failed (matches §4.5's
+  anti-enumeration posture).
+
+**Acceptance criteria.**
+- [ ] `cargo test -p liquid-crypto` round-trips plaintext via
+      `encrypt` → `decrypt` (happy path).
+- [ ] `cargo test -p liquid-crypto` returns `InvalidInput` for
+      wrong-key, truncated-envelope, and tampered-tag cases
+      (single error variant — no failure-mode leak).
+- [ ] No `unwrap()` / `expect()` outside `#[cfg(test)]`.
+- [ ] `cargo deny check` clean (matches workspace policy).
+- [ ] `IMPLEMENTATION_PLAN.md §4` gains a `4.x` subsection
+      documenting the three-function surface.
+
 ### [TASK-017] M10 multi-instance tenant configuration
 
 **Phase:** 2
