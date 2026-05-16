@@ -20,6 +20,15 @@ moved into a real version section when a release is cut.
 
 ### Documentation
 
+- `docs/ops/branch-protection.md` (new) — maintainer checklist for
+  enabling GitHub branch-protection on `main`. Names the exact
+  required CI checks (`Rust (ubuntu-latest)`, `CLI bats tests`,
+  `cargo audit`, `cargo deny`, `ai-check`, `sync-docs`) and the
+  additional settings (require PR, dismiss stale approvals,
+  require linear history, disallow force-pushes and deletions).
+  GitHub branch-protection rules cannot be applied from CI
+  without admin credentials; the doc is therefore the auditable
+  checklist for the maintainer task.
 - `tests/cli/README.md` (new) — explicit "skip-only until M6.5"
   status note. Distinguishes the **live** tests
   (`01_branch_name_gate.bats`, `02_bump_version.bats`,
