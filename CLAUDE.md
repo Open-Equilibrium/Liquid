@@ -350,6 +350,20 @@ or `feat/main-page-redesign` are unaffected. Covered by 11 cases in
   (`json-pretty`, `json-check`, `yaml-check`, `hash`, `version`). To add
   a new use case, extend the script and review the change; never bypass
   the wrapper with `python3 -c "<arbitrary>"`.
+- `gh-job-log` — fetches GitHub Actions logs for a failed run and
+  surfaces only the failure-relevant tail. Usage:
+  ```sh
+  .claude/scripts/gh-job-log <run_id>          # whole run
+  .claude/scripts/gh-job-log <run_id> <job_id> # single job
+  ```
+  Uses the `gh` CLI when available (`gh run view --log-failed`);
+  otherwise falls back to the GitHub REST API via `curl` with
+  `$GH_TOKEN` and `$GH_REPO` set. Writes the raw log to
+  `.ai/artifacts/logs/gh-job-<run_id>-<ts>.log` and prints the
+  last 50 lines of every failed step to stdout. Cited by the
+  `log-volume` rule (`.claude/rules/log-volume.md`) as the canonical
+  way to bring CI failures into the chat without pasting the full
+  log.
 
 ### Project commands quick reference
 

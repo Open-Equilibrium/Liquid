@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# .claude/scripts/gh-job-log — fetch GitHub Actions logs and surface
+# only the failures, not the noise.
+#
+# Usage:
+#   .claude/scripts/gh-job-log <run_id>
+#   .claude/scripts/gh-job-log <run_id> <job_id>
+#
+# Behaviour:
+#   - If `gh` is on PATH, uses `gh run view --log-failed` (the cheapest
+#     and most accurate path; preserves step boundaries).
+#   - Otherwise falls back to the REST API via `curl` with $GH_TOKEN.
+#   - Either path writes the raw log under
+#     `.ai/artifacts/logs/gh-job-<run_id>-<ts>.log` and prints to
+#     stdout the **last 50 lines of every failed step** (so the
+#     summary that lands in the chat is bounded and useful).
+#
+# Required env:
+#   GH_TOKEN     a GitHub token with `actions:read` and `repo:read`.
+#                Skip when `gh` CLI is configured (gh handles auth).
+#   GH_REPO      `owner/repo` (e.g. `open-equilibrium/liquid`).
+#                Skip when `gh` CLI is configured.
+#
+# Exit codes:
+#   0   logs fetched and printed (may include "no failures" message).
+#   2   bad invocation (missing args).
+#   3   unable to fetch logs (network / auth / unknown run id).
+
+set -euo pipefail
+
+usage() {
+  cat <<'EOF' >&2
+Usage:
+  .claude/scripts/gh-job-log <run_id>
+  .claude/scripts/gh-job-log <run_id> <job_id>
+
+Required env when `gh` CLI is unavailable:
+  GH_TOKEN   GitHub token with actions:read + repo:read
+  GH_REPO    owner/repo  (e.g. open-equilibrium/liquid)
+EOF
+  exit 2
+}
+
+[ "$#" -ge 1 ] || usage
+run_id="$1"
+job_id="${2:-}"
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+log_dir="$repo_root/.ai/artifacts/logs"
+mkdir -p "$log_dir"
+ts=$(date -u +%Y%m%dT%H%M%SZ)
+raw_log="$log_dir/gh-job-${run_id}-${ts}.log"
+
+print_tail_per_failed_step() {
+  # The fallback parser scans for "##[error]" markers and prints the
+  # last 50 lines of each group. The `gh run view --log-failed` output
+  # already brackets failed steps; we still cap each block at 50 lines
+  # so a runaway log cannot drown the chat.
+  awk '
+    /^##\[group\]/   { in_group = 1; lines = ""; n = 0; header = $0; next }
+    /^##\[endgroup\]/{
+      if (failed_in_group) {
+        print header
+        # Trim to last 50 lines
+        start = n - 50; if (start < 1) start = 1
+        for (i = start; i <= n; i++) print buf[i]
+        print "##[endgroup]"
+      }
+      in_group = 0; failed_in_group = 0; n = 0; delete buf; next
+    }
+    {
+      if (in_group) { n++; buf[n] = $0 }
+      else          { print $0 }
+      if ($0 ~ /##\[error\]|error\[/ || $0 ~ /FAILED|failure|panicked/) {
+        failed_in_group = 1
+      }
+    }
+  ' "$1" | tail -n 200
+}
+
+fetch_with_gh() {
+  # `gh run view --log-failed` already returns just the failed-step
+  # output (with group/endgroup markers preserved). Falls back to
+  # plain `--log` if the failed flag is unsupported.
+  if [ -n "$job_id" ]; then
+    gh run view "$run_id" --job "$job_id" --log-failed 2>/dev/null \
+      || gh run view "$run_id" --job "$job_id" --log
+  else
+    gh run view "$run_id" --log-failed 2>/dev/null \
+      || gh run view "$run_id" --log
+  fi
+}
+
+fetch_with_curl() {
+  local repo="${GH_REPO:?GH_REPO must be set (e.g. open-equilibrium/liquid)}"
+  local token="${GH_TOKEN:?GH_TOKEN must be set}"
+  local url
+  if [ -n "$job_id" ]; then
+    url="https://api.github.com/repos/${repo}/actions/jobs/${job_id}/logs"
+  else
+    url="https://api.github.com/repos/${repo}/actions/runs/${run_id}/logs"
+  fi
+  # The GitHub API returns a 302 to a signed S3 URL; -L follows it.
+  # The body is a zip when fetching the whole run, plain text per job.
+  local tmp
+  tmp=$(mktemp)
+  local http_code
+  http_code=$(
+    curl -sSL \
+      -H "Authorization: Bearer ${token}" \
+      -H "Accept: application/vnd.github+json" \
+      -H "X-GitHub-Api-Version: 2022-11-28" \
+      -o "$tmp" \
+      -w '%{http_code}' \
+      "$url"
+  )
+  if [ "$http_code" != "200" ]; then
+    printf 'gh-job-log: GitHub API returned HTTP %s for %s\n' "$http_code" "$url" >&2
+    rm -f "$tmp"
+    return 3
+  fi
+  # If it's a zip (whole run), extract; if plain text (single job), cat.
+  if [ "$(head -c4 "$tmp" | od -An -c | tr -d ' ')" = "PK003004" ]; then
+    local zipdir
+    zipdir=$(mktemp -d)
+    if ! unzip -q "$tmp" -d "$zipdir" 2>/dev/null; then
+      printf 'gh-job-log: failed to unzip API response (is `unzip` installed?)\n' >&2
+      rm -rf "$tmp" "$zipdir"
+      return 3
+    fi
+    # Concatenate every step log; preserves group markers if the
+    # runner used them.
+    find "$zipdir" -type f -name '*.txt' -print0 \
+      | sort -z \
+      | xargs -0 cat
+    rm -rf "$zipdir"
+  else
+    cat "$tmp"
+  fi
+  rm -f "$tmp"
+}
+
+main() {
+  if command -v gh >/dev/null 2>&1; then
+    fetch_with_gh > "$raw_log" || {
+      printf 'gh-job-log: `gh run view` failed; check `gh auth status`\n' >&2
+      exit 3
+    }
+  else
+    if [ -z "${GH_TOKEN:-}" ] || [ -z "${GH_REPO:-}" ]; then
+      printf 'gh-job-log: no `gh` CLI on PATH and GH_TOKEN/GH_REPO not set.\n' >&2
+      usage
+    fi
+    fetch_with_curl > "$raw_log" || exit 3
+  fi
+
+  printf 'Raw log: %s (%s lines)\n' "$raw_log" "$(wc -l < "$raw_log")"
+  printf -- '--- summary (last 50 lines per failed step) ---\n'
+
+  if [ ! -s "$raw_log" ]; then
+    printf '(empty log — run may still be queued or the job had no failures)\n'
+    exit 0
+  fi
+
+  print_tail_per_failed_step "$raw_log"
+}
+
+main "$@"

@@ -53,6 +53,7 @@
       "Bash(tail *)",
       "Bash(jq *)",
       "Bash(.claude/scripts/py *)",
+      "Bash(.claude/scripts/gh-job-log *)",
       "Bash(bash -n *)",
       "Bash(.claude/hooks/filter-test-output.sh)",
       "Bash(.claude/hooks/save-artifacts.sh)",

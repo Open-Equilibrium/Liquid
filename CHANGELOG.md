@@ -20,6 +20,15 @@ moved into a real version section when a release is cut.
 
 ### Added
 
+- `.claude/scripts/gh-job-log` — GitHub Actions workflow-log
+  fetcher. `bash .claude/scripts/gh-job-log <run_id> [<job_id>]`
+  pulls the run log via `gh run view --log-failed` (or `curl` + the
+  REST API when `gh` is absent), writes the raw output to
+  `.ai/artifacts/logs/gh-job-<run_id>-<ts>.log`, and prints only the
+  last 50 lines of every failed step. Cited by the new `log-volume`
+  rule as the canonical way to surface CI failures without pasting
+  the full log into chat.
+
 - `.claude/agents/github-pr.md` — dedicated read-only GitHub
   inspector subagent (haiku). Restricted to the `mcp__github__*` read
   tools only (no comment / merge / push capability). Use for "what's
