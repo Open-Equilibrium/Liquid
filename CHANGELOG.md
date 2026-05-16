@@ -18,6 +18,17 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed
+
+- `justfile` (`lint-rust`, `lint-rust-filtered`, `fmt-rust`) and
+  `lefthook.yml` (`rust-fmt`): pass `--all` to `cargo fmt` when
+  `--manifest-path` is set. rustfmt 1.8+ errors with "Failed to
+  find targets" without `--all`, which silently broke `just check`
+  (and `just lint`) for any contributor on the current pinned
+  toolchain. CI already uses the equivalent form (`cd core &&
+  cargo fmt --all --check` via `working-directory: core`), so the
+  bug was local-only. No source files reformatted by the fix.
+
 ### Documentation
 
 - `docs/ops/branch-protection.md` (new) — maintainer checklist for

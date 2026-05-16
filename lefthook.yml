@@ -7,7 +7,9 @@ pre-commit:
   commands:
     rust-fmt:
       glob: "core/**/*.{rs,toml}"
-      run: cargo fmt --manifest-path core/Cargo.toml --check
+      # `--all` is required when `--manifest-path` is set (rustfmt
+      # 1.8+ errors with "Failed to find targets" otherwise).
+      run: cargo fmt --all --manifest-path core/Cargo.toml --check
 
     rust-clippy:
       glob: "core/**/*.rs"

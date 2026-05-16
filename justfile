@@ -41,18 +41,22 @@ test-rust-filtered:
     bash -c 'set -o pipefail; cargo test --manifest-path core/Cargo.toml --workspace 2>&1 | .claude/hooks/filter-test-output.sh'
 
 # Lint Rust (format check + clippy)
+# `cargo fmt` needs `--all` when `--manifest-path` is set; without it
+# rustfmt 1.8+ errors with "Failed to find targets". Matches the CI
+# invocation in .github/workflows/ci.yml (which uses
+# `working-directory: core` + `cargo fmt --all --check`).
 lint-rust:
-    cargo fmt --manifest-path core/Cargo.toml --check
+    cargo fmt --all --manifest-path core/Cargo.toml --check
     cargo clippy --manifest-path core/Cargo.toml --all-targets -- -D warnings
 
 # Lint Rust, piping clippy output through filter-test-output.sh
 lint-rust-filtered:
-    bash -c 'set -o pipefail; cargo fmt --manifest-path core/Cargo.toml --check 2>&1 | .claude/hooks/filter-test-output.sh'
+    bash -c 'set -o pipefail; cargo fmt --all --manifest-path core/Cargo.toml --check 2>&1 | .claude/hooks/filter-test-output.sh'
     bash -c 'set -o pipefail; cargo clippy --manifest-path core/Cargo.toml --all-targets -- -D warnings 2>&1 | .claude/hooks/filter-test-output.sh'
 
 # Auto-fix Rust formatting
 fmt-rust:
-    cargo fmt --manifest-path core/Cargo.toml
+    cargo fmt --all --manifest-path core/Cargo.toml
 
 # Generate Rust coverage report (requires cargo-tarpaulin)
 coverage-rust:
