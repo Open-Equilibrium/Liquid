@@ -18,6 +18,77 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Added — M6 Flutter shell skeleton (TASK-013)
+
+- `app/` scaffold (`flutter create --platforms=linux --org
+  io.openequilibrium --project-name liquid_app`). Depends on
+  `flutter_riverpod ^2.5.0` and the in-repo
+  `path: ../sdk/liquid_sdk` package.
+- Four canonical widgets per `IMPLEMENTATION_PLAN.md §5.7`:
+  - `RootShell` (`Row` of resizable `ExplorerPanel` + `PageArea`;
+    drag handle between them clamped to 200–480 px).
+  - `ExplorerPanel` (workspace switcher dropdown driven by
+    `workspacesProvider` + section headers for Pages / Apps /
+    Tags — real children land with M8 data sources).
+  - `PageArea` (toolbar with active-workspace title + `add`
+    button + pending `save` / `history`).
+  - `PageGrid` (12×12 grid, `Stack`+`Positioned` layout,
+    drag-to-reposition + bottom-right resize handle, snap-to-grid
+    integer rounding). One placeholder `GridItem` seeded by
+    `gridItemsProvider` so the grid is exercisable on first
+    launch (M6 success criterion).
+- `app/test/widget_test.dart` (4 cases) — shell mounts the four
+  widgets; switcher lists demo workspaces; PageGrid hosts the
+  placeholder; toolbar wires the documented affordances.
+
+### Added — M8 Public Dart SDK API surface (TASK-015)
+
+- `sdk/liquid_sdk/` scaffold (`flutter create --template=package`).
+- Typed component-author API:
+  - `LiquidComponent` abstract base (extends `StatefulWidget`)
+    with `inputs` / `outputs` / `gridConstraints` getters.
+  - `InputSlot` / `OutputSlot` typed slot handles +
+    `InputSlotMap` / `OutputSlotMap` aliases.
+  - `SlotSchema` + `SlotKind` enum + sealed `SlotValue` with
+    `when` matcher (mirrors `liquid_core::SlotValue`).
+- Declarative manifest types: `AppManifest`,
+  `ComponentManifest`, `Permission`, `TenantConfigSchema`,
+  `CliCommandDeclaration`, `ManifestAction`.
+- Abstract runtime APIs (concrete impls land with TASK-012):
+  `GridApi`, `VcsApi` (+ `HistoryEntry`), `PermissionApi`,
+  `SlotEmitter`, `SlotConsumer`.
+- `sdk/liquid_sdk/test/liquid_sdk_test.dart` (6 cases) — the M8
+  success criterion (`_ResetCounter` stub component declares one
+  input + one output) + SlotValue matcher routing + AppManifest
+  round-trip.
+
+### Added — M9 Rust-side data binding broker (TASK-016a)
+
+- `liquid_bindings::SlotBroker` trait + `InProcessSlotBroker`
+  Phase-2 backend. Per-slot `tokio::sync::broadcast` channels
+  (`SLOT_BUFFER_SIZE = 256`), in-memory wiring table, fan-out
+  on publish to wired downstreams.
+- `SlotWiring { from, to }` + `BindingsDocument { wires }` —
+  JSON-serialisable shapes the SDK persists to
+  `.liquid/pages/<page_id>/bindings.json` so wiring survives
+  page reload. `save_bindings` / `load_bindings` is the
+  round-trip.
+- `SharedBroker = Arc<dyn SlotBroker>` type alias for the
+  bridge to share across FFI workers.
+- 9 inline tests in `core/liquid-bindings/src/broker.rs` —
+  publish-no-subscribers / publish-then-receive (one + two
+  subscribers) / wire fans out / self-wire rejection / wire is
+  idempotent / save→load round-trip survives a fresh broker
+  (proves wiring replay works on page reload) / load rejects
+  self-wires.
+
+Carved out for follow-ups (each tracked in `TASKS.md`):
+TASK-016b (wiring UI on `PageGrid`, blocked on M6 page tooling
++ TASK-012), TASK-012 (M5 Dart side — FFI codegen + `bridge.
+publishSlot` / `subscribeSlot`), TASK-017 (M10 multi-instance
+tenant config with AES-256-GCM-encrypted persistence + UI form
+generation, blocked on TASK-012).
+
 ### Added — M7 full agent CLI (TASK-009)
 
 - `liquid workspace list` — NDJSON, newest first, filtered to

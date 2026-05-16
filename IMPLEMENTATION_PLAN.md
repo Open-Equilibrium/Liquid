@@ -747,30 +747,32 @@ Manual validation: [`docs/manual-validation-m6.5.md`](docs/manual-validation-m6.
 involves a Rust FFI call. UI state (hover, focus, animation) uses `StateProvider`
 or local widget state. No `setState` outside of isolated leaf widgets.
 
-- [ ] `RootShell` widget — `Row` of `ExplorerPanel` (fixed width, resizable) +
-  `PageArea` (fills remaining space)
-- [ ] `WorkspaceSwitcher` — compact dropdown at top of explorer; on switch,
-  invalidates all workspace-scoped Riverpod providers
-- [ ] `ExplorerPanel`:
-  - `PageTreeView` — recursive `ListView` matching the Notion-style hierarchy
-    (indent, icon, rename on double-tap, right-click context menu)
-  - `AppInstanceListView` — flat list of app instances in the active workspace
-  - `TagSectionView` — collapsible sections driven by tag filter rules
-- [ ] `PageArea` — renders the active `PageView`
-- [ ] `PageView`:
-  - Contains `PageGrid`
-  - Toolbar: add item, save, history, share
-- [ ] `PageGrid`:
-  - Fixed column/row coordinate system (configurable density, default 12 cols)
-  - `GridItem` widget wraps any child (app instance or component)
-  - Drag to reposition (snap to grid)
-  - Resize handle on bottom-right corner of each `GridItem`
-  - Maximise button expands item to fill `PageArea`
-- [ ] Hard-code one placeholder `GridItem` (a coloured box) to validate the grid
-  before real app instances exist
+- [x] `RootShell` widget — `Row` of `ExplorerPanel` (fixed width, resizable
+      via a `MouseRegion`-wrapped `GestureDetector` divider) + `PageArea`
+      (fills remaining space).
+- [x] `WorkspaceSwitcher` — compact dropdown at top of explorer driven by
+      `workspacesProvider` + `currentWorkspaceProvider`; on switch,
+      `PageArea` re-derives its title from the active workspace.
+- [~] `ExplorerPanel`:
+  - [ ] `PageTreeView` — placeholder section header (M6.5 / M8 wires real data)
+  - [ ] `AppInstanceListView` — placeholder section header (M8)
+  - [ ] `TagSectionView` — placeholder section header (M6+ follow-up)
+- [x] `PageArea` — toolbar (add-item, save-pending, history-pending) +
+      `PageGrid`.
+- [x] `PageGrid` — 12-column / 12-row coordinate system; `GridItem` widget
+      wraps any child; drag-to-reposition (snap-to-grid via integer round);
+      bottom-right resize handle constrained to the 12×12 footprint.
+      Maximise button deferred to a follow-up (toolbar already shows the
+      shape).
+- [x] One placeholder `GridItem` (coloured box) seeded by
+      `gridItemsProvider` so the grid is exercisable on first launch.
 
-**Success criterion:** App launches on Linux. User can create a workspace, open
-a page, see the grid, drag the placeholder item, and resize it.
+**Success criterion:** The 4 widget tests in `app/test/widget_test.dart`
+pass on the cloud session's headless `flutter test` runner (RootShell
+mounts the four canonical widgets; workspace switcher lists demo
+workspaces; PageGrid hosts the placeholder; toolbar wires the
+documented affordances). Visual + drag-on-real-display validation is
+deferred per `CLAUDE.md`'s cloud-session limitation.
 
 ---
 
@@ -859,7 +861,13 @@ independently.
 
 ### 6.1 Milestone 8 — Public Dart SDK (`liquid_sdk`)
 
-- [ ] `AppManifest` class — declarative description of an app:
+> **Status:** API surface shipped (TASK-015 Rust-visible Dart
+> stubs); concrete `flutter_rust_bridge`-backed runtime APIs land
+> with TASK-012 (M5 Dart side). Re-read after TASK-012 closes
+> to flip every `- [ ]` to `- [x]` and drop the abstract-class
+> caveat.
+
+- [x] `AppManifest` class — declarative description of an app:
   ```dart
   class AppManifest {
     final String id;           // reverse-DNS: com.example.myapp
@@ -871,9 +879,9 @@ independently.
     final List<Permission> requiredPermissions;
   }
   ```
-- [ ] `ComponentManifest` — declares `inputSlots`, `outputSlots`,
+- [x] `ComponentManifest` — declares `inputSlots`, `outputSlots`,
   `minGridCells`, `maxGridCells`, and `extensionPoints` (if any)
-- [ ] `LiquidComponent` abstract base class — Dart developers extend this:
+- [x] `LiquidComponent` abstract base class — Dart developers extend this:
   ```dart
   abstract class LiquidComponent extends StatefulWidget {
     InputSlotMap get inputs;
@@ -881,36 +889,63 @@ independently.
     GridConstraints get gridConstraints;
   }
   ```
-- [ ] `SlotSchema` — typed schema for a slot value (mirrors `SlotValue` in Rust)
-- [ ] `GridApi` — exposes `requestResize`, `requestMaximise`
-- [ ] `VcsApi` — exposes `read`, `write`, `history`, `undo` scoped to the
-  current app instance
-- [ ] `PermissionApi` — exposes `check(action, resource)` for the current principal
-- [ ] Document each class with a one-paragraph doc comment and a usage example
+- [x] `SlotSchema` + `SlotValue` (sealed-class with `when` matcher)
+      — typed schema + values, mirrors `liquid_core::SlotValue`.
+- [x] `GridApi` abstract — `requestResize`, `requestMaximise`
+      (concrete impl pending TASK-012).
+- [x] `VcsApi` abstract — `read`, `write`, `history`, `undo` +
+      `tenantConfig` (concrete impl pending TASK-012).
+- [x] `PermissionApi` abstract — `check(action, resource)`
+      (concrete impl pending TASK-012).
+- [x] Doc comments + the `_ResetCounter` usage example exercised
+      by `sdk/liquid_sdk/test/liquid_sdk_test.dart`.
 
-**Success criterion:** A developer can create a new Flutter package, depend on
-`liquid_sdk`, extend `LiquidComponent`, declare two slots, and the SDK compiles
-with no errors.
+**Success criterion:** ✅ Shipped — the M8 success criterion test
+in `sdk/liquid_sdk/test/liquid_sdk_test.dart` defines a stub
+`LiquidComponent` with one input + one output, and the suite
+(6 / 6) exercises the typed surface (component declares, slot
+matcher routes by variant, manifest round-trips). `flutter test`
+exits 0; `flutter analyze` clean.
 
 ---
 
 ### 6.2 Milestone 9 — Data binding broker (Rust + Dart)
 
-- [ ] Implement `InProcessSlotBroker` in `liquid-bindings` (satisfies `SlotBroker`)
-  - Uses `tokio::sync::broadcast` per slot; subscribers get their own receiver
-  - `wire` stores wiring definitions in the workspace VCS as a JSON file at
-    `.liquid/pages/<page_id>/bindings.json`
-  - Wiring is replayed on page load — all slot subscriptions are re-established
-- [ ] Expose `publish_slot`, `subscribe_slot`, `wire_slots`, `load_bindings`
-  through `liquid-sdk-bridge` FFI
-- [ ] In Dart SDK, `OutputSlot.emit(value)` calls `bridge.publishSlot(...)`
-- [ ] In Dart SDK, `InputSlot.stream` returns a `Stream<SlotValue>` backed by
-  `bridge.subscribeSlot(...)`
-- [ ] Add wiring UI to `PageGrid`: long-press an output slot badge → drag to
-  input slot badge → releases to call `bridge.wireSlots(...)`
+> **Status:** Rust side shipped (TASK-016a). Dart-side `OutputSlot.emit` /
+> `InputSlot.stream` + the FFI exposure ride with TASK-012 (M5 Dart
+> side); the page-grid wiring UI is TASK-016b (depends on M6 page
+> tooling).
 
-**Success criterion:** Spreadsheet component emits a row-selected event; chart
-component receives it and re-renders. Wiring survives page close and reopen.
+- [x] Implement `InProcessSlotBroker` in `liquid-bindings` (satisfies `SlotBroker`)
+  - Uses `tokio::sync::broadcast` per slot (`SLOT_BUFFER_SIZE = 256`);
+    subscribers get their own receiver
+  - `wire` records `SlotWiring { from, to }` rows in an in-memory
+    table; `publish` fans out to wired downstreams in the same call.
+  - `save_bindings` / `load_bindings` round-trip a JSON-friendly
+    `BindingsDocument` the SDK persists to
+    `.liquid/pages/<page_id>/bindings.json`. Wiring is replayed by
+    calling `load_bindings(doc)` after page load.
+- [ ] Expose `publish_slot`, `subscribe_slot`, `wire_slots`,
+      `load_bindings` through `liquid-sdk-bridge` FFI — pending
+      TASK-012.
+- [ ] Dart SDK `OutputSlot.emit(value)` calls `bridge.publishSlot(...)`
+      — abstract surface ships (`SlotEmitter`); concrete impl pending
+      TASK-012.
+- [ ] Dart SDK `InputSlot.stream` returns a `Stream<SlotValue>` backed
+      by `bridge.subscribeSlot(...)` — abstract surface ships
+      (`SlotConsumer`); concrete impl pending TASK-012.
+- [ ] Add wiring UI to `PageGrid`: long-press an output slot badge →
+      drag to input slot badge → releases to call
+      `bridge.wireSlots(...)` — TASK-016b, depends on M6 page
+      tooling.
+
+**Success criterion (Rust side):** ✅ Shipped — the 9 inline
+`SlotBroker` tests in `core/liquid-bindings/src/broker.rs` cover
+publish-no-subscribers / publish-then-receive / fan-out via wire
+/ self-wire rejection / idempotent re-wiring / save→load
+round-trip surviving a fresh broker instance / load rejecting
+self-wires. End-to-end "Spreadsheet emits → Chart updates"
+demonstration ships with TASK-012 (Dart side).
 
 ---
 

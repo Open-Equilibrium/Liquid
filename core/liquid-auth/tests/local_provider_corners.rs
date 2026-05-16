@@ -156,10 +156,7 @@ async fn find_agent_by_principal_returns_summary_or_notfound() {
         .await
         .expect("provision");
 
-    let summary: AgentSummary = p
-        .find_agent_by_principal(bot)
-        .await
-        .expect("find existing");
+    let summary: AgentSummary = p.find_agent_by_principal(bot).await.expect("find existing");
     assert_eq!(summary.principal, bot);
     assert_eq!(summary.workspace, ws);
     assert_eq!(summary.name, "worker");

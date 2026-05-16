@@ -63,7 +63,109 @@ back → assert round-trip data + content_hash matches).
 
 ---
 
+### [TASK-016b] M9 wiring UI on `PageGrid`
+
+**Phase:** 2
+**Milestone:** M9 — wiring UI half (`IMPLEMENTATION_PLAN.md §6.2`)
+**Status:** Planned
+**Blocked by:** M6 page tooling + TASK-012 (Dart bridge)
+
+**What.** Add the long-press-on-output-slot → drag → drop-on-input
+gesture to `PageGrid` that calls `bridge.wireSlots(...)` (TASK-012)
+which translates to `liquid-bindings::InProcessSlotBroker::wire`
+(TASK-016a, Done). Persists the resulting `BindingsDocument` to
+`.liquid/pages/<page_id>/bindings.json` so wiring survives a page
+reload.
+
+### [TASK-017] M10 multi-instance tenant configuration
+
+**Phase:** 2
+**Milestone:** M10 (`IMPLEMENTATION_PLAN.md §6.3`)
+**Status:** Planned
+**Blocked by:** TASK-012 (M5 Dart side), TASK-011a (encryption helper)
+
+**What.** AES-256-GCM-encrypted per-instance tenant config under
+`.liquid/instances/<instance_id>/tenant.enc.json`; key derived
+from the workspace owner's password via Argon2id (never stored
+on disk). UI form generated from the app's
+`TenantConfigSchema.jsonSchema` (already declared in the M8 SDK).
+
 ## Done tasks
+
+### [TASK-016a] M9 Rust side — `SlotBroker` + `InProcessSlotBroker`
+
+**Phase:** 2
+**Milestone:** M9 — Rust half (`IMPLEMENTATION_PLAN.md §6.2`)
+**Status:** Done
+
+**What.** Shipped the `liquid-bindings::SlotBroker` trait + the
+`InProcessSlotBroker` Phase-2 backend (per-slot
+`tokio::sync::broadcast` channels, in-memory wiring table,
+JSON-serialisable `BindingsDocument` for page-reload replay).
+Plus `SharedBroker` type alias (`Arc<dyn SlotBroker>`) ready for
+the bridge to share across FFI workers.
+
+**Acceptance criteria.**
+- [x] `cargo test -p liquid-bindings` is green (9 inline tests).
+- [x] `cargo clippy --workspace --all-targets --locked -- -D
+      warnings` clean.
+- [x] No `unwrap()` / `expect()` outside `#[cfg(test)]`.
+- [x] `IMPLEMENTATION_PLAN.md §4.4` + §6.2 ticked for the Rust
+      half; Dart side cross-referenced to TASK-012 + TASK-016b.
+
+### [TASK-015] M8 Public Dart SDK API surface
+
+**Phase:** 2
+**Milestone:** M8 (`IMPLEMENTATION_PLAN.md §6.1`)
+**Status:** Done
+
+**What.** Scaffolded `sdk/liquid_sdk/` (`flutter create --template=package`)
+and shipped the M8 API surface: `LiquidComponent`,
+`InputSlot`/`OutputSlot`/`SlotSchema`, sealed
+`SlotValue` with `when` matcher, `AppManifest`,
+`ComponentManifest`, `Permission`, `TenantConfigSchema`,
+`CliCommandDeclaration`, plus abstract `GridApi`/`VcsApi`/
+`PermissionApi`/`SlotEmitter`/`SlotConsumer` runtime APIs. The
+concrete `flutter_rust_bridge`-backed runtime impls ship with
+TASK-012; the M8 SDK's job is the *typed surface developers
+extend*.
+
+**Acceptance criteria.**
+- [x] `flutter test` is green (6 / 6 cases covering the M8
+      plan-level success criterion — a `_ResetCounter` stub
+      component declares one input + one output and exposes the
+      typed surface).
+- [x] `flutter analyze` clean.
+- [x] `IMPLEMENTATION_PLAN.md §6.1` ticks every checkbox + the
+      ones marked "abstract surface; concrete impl pending
+      TASK-012".
+
+### [TASK-013] M6 Flutter shell skeleton
+
+**Phase:** 1 / 2 (transition)
+**Milestone:** M6 (`IMPLEMENTATION_PLAN.md §5.7`)
+**Status:** Done
+
+**What.** Scaffolded `app/` (`flutter create --platforms=linux`)
+and shipped the four canonical widgets: `RootShell` (resizable
+`Row` of `ExplorerPanel` + `PageArea`), `ExplorerPanel`
+(workspace switcher dropdown + placeholder section list),
+`PageArea` (toolbar + `PageGrid`), `PageGrid` (12×12 grid,
+drag-to-reposition, bottom-right resize handle, snap-to-grid).
+Riverpod hosts every state container. One placeholder `GridItem`
+seeds the grid so it's exercisable on first launch.
+
+**Acceptance criteria.**
+- [x] `flutter test` is green (4 / 4 widget tests covering the
+      M6 success criterion: RootShell mounts the four widgets;
+      workspace switcher lists demo workspaces; PageGrid hosts
+      the placeholder; toolbar wires the documented affordances).
+- [x] `flutter analyze` clean.
+- [x] No `dart:io`, no platform plugins — Absolute Rule 2.
+- [x] `IMPLEMENTATION_PLAN.md §5.7` ticks shipped checkboxes;
+      the deeper `PageTreeView` / `AppInstanceListView` /
+      `TagSectionView` items stay open as placeholder section
+      headers (await M8 data sources).
 
 ### [TASK-009] Full agent CLI (M7)
 
