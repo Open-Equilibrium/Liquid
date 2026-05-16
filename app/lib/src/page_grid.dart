@@ -117,8 +117,7 @@ class PageGrid extends ConsumerWidget {
                   onResize: (newCols, newRows) {
                     ref.read(gridItemsProvider.notifier).state = items
                         .map((it) => it.id == item.id
-                            ? it.copyWith(
-                                columnSpan: newCols, rowSpan: newRows)
+                            ? it.copyWith(columnSpan: newCols, rowSpan: newRows)
                             : it)
                         .toList();
                   },
@@ -166,10 +165,10 @@ class _PositionedGridItem extends StatelessWidget {
             onPanUpdate: (d) {
               final newCol = ((left + d.delta.dx) / cellWidth).round() + 1;
               final newRow = ((top + d.delta.dy) / cellHeight).round() + 1;
-              final clampedCol = newCol
-                  .clamp(1, kPageGridColumns - item.columnSpan + 1);
-              final clampedRow = newRow
-                  .clamp(1, kPageGridRows - item.rowSpan + 1);
+              final clampedCol =
+                  newCol.clamp(1, kPageGridColumns - item.columnSpan + 1);
+              final clampedRow =
+                  newRow.clamp(1, kPageGridRows - item.rowSpan + 1);
               if (clampedCol != item.column || clampedRow != item.row) {
                 onMove(clampedCol, clampedRow);
               }
@@ -195,10 +194,10 @@ class _PositionedGridItem extends StatelessWidget {
               onPanUpdate: (d) {
                 final newCols = ((width + d.delta.dx) / cellWidth).round();
                 final newRows = ((height + d.delta.dy) / cellHeight).round();
-                final clampedCols = newCols.clamp(
-                    1, kPageGridColumns - item.column + 1);
-                final clampedRows = newRows.clamp(
-                    1, kPageGridRows - item.row + 1);
+                final clampedCols =
+                    newCols.clamp(1, kPageGridColumns - item.column + 1);
+                final clampedRows =
+                    newRows.clamp(1, kPageGridRows - item.row + 1);
                 if (clampedCols != item.columnSpan ||
                     clampedRows != item.rowSpan) {
                   onResize(clampedCols, clampedRows);

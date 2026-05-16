@@ -71,7 +71,8 @@ class HistoryEntry {
 /// destructive UI affordances (e.g. show the trash icon only
 /// when delete is permitted).
 abstract class PermissionApi {
-  Future<bool> check({required ManifestAction action, required String resource});
+  Future<bool> check(
+      {required ManifestAction action, required String resource});
 }
 
 /// Live publish/subscribe handle for an [OutputSlot]. Phase-2

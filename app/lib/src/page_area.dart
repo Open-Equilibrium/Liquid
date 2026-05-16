@@ -46,8 +46,8 @@ class _Toolbar extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(title,
-                  style: Theme.of(context).textTheme.titleMedium),
+              child:
+                  Text(title, style: Theme.of(context).textTheme.titleMedium),
             ),
             IconButton(
               key: const Key('toolbar-add-item'),

@@ -47,8 +47,7 @@ void main() {
     expect(find.text('Placeholder'), findsOneWidget);
   });
 
-  testWidgets(
-      'Toolbar shows add-item button (active) + save/history (pending)',
+  testWidgets('Toolbar shows add-item button (active) + save/history (pending)',
       (tester) async {
     await tester.pumpWidget(const ProviderScope(child: LiquidApp()));
     final add = find.byKey(const Key('toolbar-add-item'));

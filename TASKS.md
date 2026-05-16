@@ -90,6 +90,24 @@ from the workspace owner's password via Argon2id (never stored
 on disk). UI form generated from the app's
 `TenantConfigSchema.jsonSchema` (already declared in the M8 SDK).
 
+### [TASK-018] Re-enable multi-platform Flutter CI matrix
+
+**Phase:** 4 (mobile + cross-platform polish)
+**Milestone:** Pre-1.0 obligations checklist (`IMPLEMENTATION_PLAN.md §17`)
+**Status:** Planned
+**Blocked by:** Multi-platform scaffolding under `app/{android,ios,macos,windows}/`
+
+**What.** M6 only requires the Flutter shell to launch on Linux
+(`IMPLEMENTATION_PLAN.md §5.7`), so this branch's CI matrix in
+`.github/workflows/ci.yml` ships with `target: linux` only.
+When the project actually generates `flutter create --platforms=…`
+scaffolding for Android, iOS, macOS, and Windows, restore the four
+extra matrix entries (Android needs `android-actions/setup-android`,
+iOS needs `--no-codesign`) and the per-platform `flutter build`
+arms. Keep `dart format`, `flutter analyze`, and `flutter test`
+linux-only so we don't pay 5× for tests that don't change per
+platform.
+
 ## Done tasks
 
 ### [TASK-016a] M9 Rust side — `SlotBroker` + `InProcessSlotBroker`
