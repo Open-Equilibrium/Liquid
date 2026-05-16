@@ -31,14 +31,23 @@ moved into a real version section when a release is cut.
   step 3 — a new agent added to disk but forgotten in the docs).
 
 - `.claude/hooks/pre-commit-review.sh` — `PreToolUse` hook matched on
-  `Bash(git commit*)`. Snapshots `git diff --staged` to
-  `.ai/artifacts/diffs/pre-commit-<ts>.diff`, returns
-  `decision: "ask"`, and asks the agent to spawn the `code-reviewer`
-  subagent against the snapshot before the commit lands. The
-  subagent's `critical` array is the block; warnings and suggestions
-  remain advisory. Opt-out via `LIQUID_SKIP_PRE_COMMIT_REVIEW=1` for
-  rebase / conflict-resolution commits. Empty staged diff is a silent
-  no-op.
+  `Bash(git commit -*)` and `Bash(git commit --*)` (tight patterns
+  so `git commit-tree` / `git commit-graph` plumbing does not
+  trigger the hook). Snapshots `git diff --staged` to
+  `.ai/artifacts/diffs/pre-commit-<ts>.diff`, returns the documented
+  `{"hookSpecificOutput": {"permissionDecision": "ask",
+  "permissionDecisionReason": "..."}}` PreToolUse envelope, and
+  asks the agent to spawn the `code-reviewer` subagent against the
+  snapshot before the commit lands. The subagent's `critical` array
+  is the block; warnings and suggestions remain advisory. Two
+  opt-out paths: `LIQUID_SKIP_PRE_COMMIT_REVIEW=1` in the host env
+  before starting Claude Code (for a long rebase session), or a
+  `[skip-review]` token in the commit message (parsed from the
+  tool-call command on stdin via jq, for a single
+  conflict-resolution commit). Snapshot retention caps the
+  diffs/ tree at the most recent 20 entries. Empty staged diff is a
+  silent no-op. Covered by 7 bats cases in
+  `tests/cli/03_pre_commit_review_hook.bats`.
 
 - Pre-push branch-name gate (`scripts/check-branch-name.sh`, wired
   into `lefthook.yml`'s `pre-push` hook). Rejects pushes from `main`,

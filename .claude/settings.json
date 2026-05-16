@@ -57,6 +57,7 @@
       "Bash(.claude/hooks/filter-test-output.sh)",
       "Bash(.claude/hooks/save-artifacts.sh)",
       "Bash(.claude/hooks/session-start.sh)",
+      "Bash(.claude/hooks/pre-commit-review.sh)",
       "Bash(./scripts/ai-check.sh)",
       "Bash(./scripts/sync-docs-check.sh)"
     ],
@@ -113,7 +114,16 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash(git commit*)",
+        "matcher": "Bash(git commit -*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-commit-review.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash(git commit --*)",
         "hooks": [
           {
             "type": "command",
