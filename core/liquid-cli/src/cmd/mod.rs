@@ -3,6 +3,7 @@
 mod audit;
 mod auth;
 mod page;
+mod parse;
 mod workspace;
 
 use liquid_core::Result;

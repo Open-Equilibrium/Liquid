@@ -3,11 +3,12 @@
 use std::path::Path;
 
 use liquid_auth::IdentityProvider;
-use liquid_core::{LiquidError, Resource, Result, WorkspaceId};
+use liquid_core::{LiquidError, Resource, Result};
 use liquid_permissions::{BuiltInRole, PermissionIndex};
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::cmd::parse;
 use crate::output::Envelope;
 use crate::services::CliServices;
 use crate::token;
@@ -29,7 +30,7 @@ pub async fn provision_agent(
     let caller_token = token::require(home)?;
     let caller = services.identity.validate_token(&caller_token).await?;
 
-    let workspace = parse_workspace_id(workspace)?;
+    let workspace = parse::workspace_id(workspace)?;
     let role = parse_role(role)?;
     let scope = parse_scope(scope, role)?;
 
@@ -53,9 +54,22 @@ pub async fn provision_agent(
     perms.assign_role(workspace, agent, role, scope).await?;
     let token = services.identity.issue_token(agent).await?;
 
+    // Emit the bare UUID under `agent_id` to mirror
+    // `data.workspace_id`; emit the full principal-form string
+    // (`agent:<uuid>`) under `principal` so callers wanting the
+    // wire form do not have to re-assemble it.
+    let agent_uuid = match agent {
+        liquid_core::PrincipalId::Agent(u) => u,
+        liquid_core::PrincipalId::User(_) => {
+            return Err(LiquidError::InvalidInput(
+                "provision_agent unexpectedly returned a User principal".into(),
+            ));
+        }
+    };
     let summary = format!("provisioned agent {agent} with role {role:?}");
     Ok(Envelope::ok_data(json!({
-        "agent_id": agent.to_string(),
+        "agent_id": agent_uuid.to_string(),
+        "principal": agent.to_string(),
         "role": format!("{role:?}"),
         "token": token,
     }))
@@ -67,12 +81,6 @@ pub async fn provision_agent(
 pub fn token(home: &Path) -> Result<Envelope> {
     let t = token::require(home)?;
     Ok(Envelope::ok_data(json!({ "token": t.clone() })).with_text(t))
-}
-
-fn parse_workspace_id(s: &str) -> Result<WorkspaceId> {
-    Uuid::parse_str(s)
-        .map(WorkspaceId)
-        .map_err(|e| LiquidError::InvalidInput(format!("workspace id not a uuid: {s}: {e}")))
 }
 
 fn parse_role(s: &str) -> Result<BuiltInRole> {

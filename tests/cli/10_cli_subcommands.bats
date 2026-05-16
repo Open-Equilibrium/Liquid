@@ -116,6 +116,62 @@ teardown() {
   [[ "$(echo "$output" | jq -r '.error')" =~ [Nn]ot[[:space:]]+[Ff]ound ]]
 }
 
+@test "audit list filters by --principal (short u: form)" {
+  ws=$(liquid --format json workspace create demo | jq -r '.data.workspace_id')
+  agent=$(liquid --format json auth provision-agent w \
+    --workspace "$ws" --role WorkspaceMember | jq -r '.data')
+  agent_token=$(echo "$agent" | jq -r '.token')
+  agent_id=$(echo "$agent" | jq -r '.agent_id')
+  export LIQUID_TOKEN="$agent_token"
+  liquid --format json page write /pages/a --workspace "$ws" --data '{"a":1}' >/dev/null
+  # The audit-list `principal` field is emitted as `a:<uuid>`; the
+  # `--principal` filter must accept either form per
+  # PrincipalId::FromStr — try the short form.
+  run liquid --format json audit list --workspace "$ws" --principal "a:$agent_id"
+  [ "$status" -eq 0 ]
+  count=$(echo "$output" | wc -l)
+  [ "$count" -eq 1 ]
+  [ "$(echo "$output" | jq -r '.principal')" = "a:$agent_id" ]
+}
+
+@test "audit list --action Undo distinguishes from Write" {
+  ws=$(liquid --format json workspace create demo | jq -r '.data.workspace_id')
+  export LIQUID_TOKEN=$(liquid --format json auth provision-agent w \
+    --workspace "$ws" --role WorkspaceMember | jq -r '.data.token')
+  op=$(liquid --format json page write /pages/a --workspace "$ws" --data '{"a":1}' \
+        | jq -r '.data.operation_id')
+  liquid --format json page undo /pages/a --workspace "$ws" --op "$op" >/dev/null
+  # Op log now holds: Write (Create), Undo. The filter must
+  # discriminate.
+  run liquid --format json audit list --workspace "$ws" --action Undo
+  [ "$status" -eq 0 ]
+  count=$(echo "$output" | wc -l)
+  [ "$count" -eq 1 ]
+  [ "$(echo "$output" | jq -r '.action')" = "Undo" ]
+  # And --action Write should exclude the Undo entry.
+  run liquid --format json audit list --workspace "$ws" --action Write
+  [ "$status" -eq 0 ]
+  count=$(echo "$output" | wc -l)
+  [ "$count" -eq 1 ]
+  [ "$(echo "$output" | jq -r '.action')" = "Write" ]
+}
+
+@test "bootstrap edge: user exists but token file missing surfaces actionable error" {
+  liquid --format json workspace create demo >/dev/null
+  # Delete the bootstrap token file but keep auth/users.toml. A
+  # second `workspace create` cannot re-register the same user
+  # (registration would fail with InvalidInput) and we no longer
+  # have the random password — the bootstrap helper must surface
+  # a friendly error pointing at the recovery options.
+  rm -f "$LIQUID_HOME/token"
+  unset LIQUID_TOKEN
+  run liquid --format json workspace create another
+  [ "$status" -eq 2 ]
+  [ "$(echo "$output" | jq -r '.ok')" = "false" ]
+  [[ "$(echo "$output" | jq -r '.error')" == *"users.toml"* ]] \
+    || [[ "$(echo "$output" | jq -r '.error')" == *"LIQUID_TOKEN"* ]]
+}
+
 @test "audit list filters by --action Write" {
   ws=$(liquid --format json workspace create demo | jq -r '.data.workspace_id')
   export LIQUID_TOKEN=$(liquid --format json auth provision-agent w \

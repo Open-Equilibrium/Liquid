@@ -26,6 +26,7 @@ use liquid_vcs::ContentStore;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+use crate::cmd::parse;
 use crate::output::Envelope;
 use crate::services::CliServices;
 use crate::token;
@@ -42,7 +43,7 @@ pub async fn write(
     let caller_token = token::require(home)?;
     let principal = services.identity.validate_token(&caller_token).await?;
 
-    let workspace = parse_workspace_id(workspace)?;
+    let workspace = parse::workspace_id(workspace)?;
     let store_path = parse_store_path(user_path)?;
     let page_id = page_id_for(workspace, user_path);
 
@@ -81,7 +82,7 @@ pub async fn read(
     let caller_token = token::require(home)?;
     let principal = services.identity.validate_token(&caller_token).await?;
 
-    let workspace = parse_workspace_id(workspace)?;
+    let workspace = parse::workspace_id(workspace)?;
     let store_path = parse_store_path(user_path)?;
     let page_id = page_id_for(workspace, user_path);
 
@@ -109,9 +110,9 @@ pub async fn undo(
     let caller_token = token::require(home)?;
     let principal = services.identity.validate_token(&caller_token).await?;
 
-    let workspace = parse_workspace_id(workspace)?;
+    let workspace = parse::workspace_id(workspace)?;
     let page_id = page_id_for(workspace, user_path);
-    let op_id = parse_op_id(op)?;
+    let op_id = parse::op_id(op)?;
 
     let perms = services.permissions.as_ref();
     require_permission!(perms, principal, Action::Write, Resource::Page(page_id));
@@ -127,18 +128,6 @@ pub async fn undo(
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
-
-fn parse_workspace_id(s: &str) -> Result<WorkspaceId> {
-    Uuid::parse_str(s)
-        .map(WorkspaceId)
-        .map_err(|e| LiquidError::InvalidInput(format!("workspace id not a uuid: {s}: {e}")))
-}
-
-fn parse_op_id(s: &str) -> Result<liquid_core::OperationId> {
-    Uuid::parse_str(s)
-        .map(liquid_core::OperationId)
-        .map_err(|e| LiquidError::InvalidInput(format!("operation id not a uuid: {s}: {e}")))
-}
 
 /// Strip the leading `/` so the user-visible `/pages/welcome`
 /// becomes the workspace-relative `pages/welcome` that `StorePath`

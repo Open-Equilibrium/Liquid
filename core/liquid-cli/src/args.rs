@@ -110,7 +110,12 @@ pub enum PageCmd {
         #[arg(long, default_value = "")]
         message: String,
     },
-    /// Read the current bytes of the page at `<path>`.
+    /// Read the page at `<path>` and decode its bytes as JSON for
+    /// the envelope's `data` field. Phase-1 contract: pages MUST
+    /// be JSON-encoded (the `--file` body source is not exempt —
+    /// it is stored verbatim, but `read` will reject non-JSON
+    /// content with `InvalidInput`). A `--raw` flag for opaque
+    /// bytes is a planned M7 follow-up.
     Read {
         path: String,
         #[arg(long)]
@@ -129,8 +134,9 @@ pub enum PageCmd {
 
 #[derive(Debug, Subcommand)]
 pub enum AuditCmd {
-    /// Print operation-log entries, newest first, one JSON object
-    /// per line (NDJSON) when `--format json`.
+    /// Print operation-log entries, oldest-first — pipe through
+    /// `tail -n 1` to get the most recent — as one JSON object per
+    /// line (NDJSON) when `--format json`.
     List {
         #[arg(long)]
         workspace: String,

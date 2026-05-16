@@ -92,13 +92,16 @@ suites report:
 - `tests/cli/00_mvp_slice.bats`: **6 passed; 0 failed** — every
   step of the MVP happy path plus the AppViewer-cannot-write
   negative path.
-- `tests/cli/10_cli_subcommands.bats`: **13 passed; 0 failed** —
+- `tests/cli/10_cli_subcommands.bats`: **16 passed; 0 failed** —
   per-subcommand focused coverage: `--version`, no-args help-exit,
   bootstrap files, registry cross-process persistence, `auth
   token` happy + no-token, invalid workspace UUID, mutually
   exclusive `--data` / `--file` plus `--file` body source,
-  NotFound on unknown read, `--action Write` filter, text-format
-  summary, text-format stderr error on bad UUID.
+  NotFound on unknown read, audit `--action Write` filter, audit
+  `--principal a:<uuid>` short-form filter, audit `--action Undo`
+  discriminates from `Write`, bootstrap edge-case (user exists
+  but token file missing) surfaces actionable error,
+  text-format summary, text-format stderr error on bad UUID.
 
 ### Step M6.5.2 — Manual walkthrough
 
@@ -287,7 +290,7 @@ filesystem registry, and could authenticate the call.
 
 Tick every box before stamping the run-log:
 
-- [ ] M6.5 — Step M6.5.1 reports 6 / 0 (mvp_slice) + 13 / 0
+- [ ] M6.5 — Step M6.5.1 reports 6 / 0 (mvp_slice) + 16 / 0
       (cli_subcommands) + the bridge tests at their §M5 baseline.
 - [ ] M6.5 — Step M6.5.2's seven walkthrough commands all
       produce the documented envelope shapes; exit codes match.

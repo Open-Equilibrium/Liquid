@@ -46,22 +46,12 @@ fn page_path(page_id: PageId) -> Result<StorePath> {
     StorePath::new(format!("pages/{}", page_id.0.simple()))
 }
 
-/// `PrincipalId::Display` produces `"user:<uuid>"` / `"agent:<uuid>"`;
-/// this parses the same shape back. Used by `check_permission` to
-/// resolve the query subject's principal id from the wire string.
+/// Re-export of [`liquid_core::PrincipalId`]'s `FromStr` impl as a
+/// helper, so the api module's call sites stay short. Accepts both
+/// long (`user:<uuid>` / `agent:<uuid>`) and short (`u:<uuid>` /
+/// `a:<uuid>`) forms — see `PrincipalId::FromStr`.
 fn parse_principal(s: &str) -> Result<PrincipalId> {
-    let (kind, id) = s
-        .split_once(':')
-        .ok_or_else(|| LiquidError::InvalidInput(format!("principal id missing prefix: {s}")))?;
-    let uuid = uuid::Uuid::parse_str(id)
-        .map_err(|e| LiquidError::InvalidInput(format!("principal id not a uuid: {s}: {e}")))?;
-    match kind {
-        "user" => Ok(PrincipalId::User(uuid)),
-        "agent" => Ok(PrincipalId::Agent(uuid)),
-        other => Err(LiquidError::InvalidInput(format!(
-            "principal id kind not recognised: {other}"
-        ))),
-    }
+    s.parse::<PrincipalId>()
 }
 
 /// Build the `InvalidInput` error returned when a `write_page` call's

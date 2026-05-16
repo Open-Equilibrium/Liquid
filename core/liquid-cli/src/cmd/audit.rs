@@ -8,12 +8,12 @@
 use std::path::Path;
 
 use liquid_auth::IdentityProvider;
-use liquid_core::{Action, LiquidError, PrincipalId, Resource, Result, WorkspaceId};
+use liquid_core::{Action, LiquidError, PrincipalId, Resource, Result};
 use liquid_permissions::PermissionIndex;
 use liquid_vcs::{ContentStore, Operation, OperationKind};
 use serde_json::{json, Value};
-use uuid::Uuid;
 
+use crate::cmd::parse;
 use crate::output::Envelope;
 use crate::services::CliServices;
 use crate::token;
@@ -29,7 +29,7 @@ pub async fn list(
 ) -> Result<Envelope> {
     let caller_token = token::require(home)?;
     let caller = services.identity.validate_token(&caller_token).await?;
-    let workspace = parse_workspace_id(workspace)?;
+    let workspace = parse::workspace_id(workspace)?;
 
     // Caller must hold Read on the workspace to inspect the audit log.
     let perms = services.permissions.as_ref();
@@ -151,23 +151,6 @@ fn parse_action_filter(s: &str) -> Result<ActionFilter> {
     }
 }
 
-fn parse_workspace_id(s: &str) -> Result<WorkspaceId> {
-    Uuid::parse_str(s)
-        .map(WorkspaceId)
-        .map_err(|e| LiquidError::InvalidInput(format!("workspace id not a uuid: {s}: {e}")))
-}
-
 fn parse_principal(s: &str) -> Result<PrincipalId> {
-    let (kind, id) = s
-        .split_once(':')
-        .ok_or_else(|| LiquidError::InvalidInput(format!("principal id missing prefix: {s}")))?;
-    let uuid = Uuid::parse_str(id)
-        .map_err(|e| LiquidError::InvalidInput(format!("principal id not a uuid: {s}: {e}")))?;
-    match kind {
-        "u" | "user" => Ok(PrincipalId::User(uuid)),
-        "a" | "agent" => Ok(PrincipalId::Agent(uuid)),
-        other => Err(LiquidError::InvalidInput(format!(
-            "principal kind not recognised: {other}"
-        ))),
-    }
+    s.parse::<PrincipalId>()
 }
