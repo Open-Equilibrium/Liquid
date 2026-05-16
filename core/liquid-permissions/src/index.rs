@@ -157,12 +157,22 @@ impl PermissionIndex for InMemoryPermissionIndex {
 }
 
 /// A workspace-scoped binding only applies to resources that belong to the
-/// same workspace. Most resources (`AppInstance`, `Component`, `Page`,
-/// `Field`) are addressed by globally-unique UUIDs and are checked via their
-/// UUIDs alone; the binding's `workspace` is then informational. The one
-/// resource that carries a workspace identifier is `Resource::Workspace(_)` —
-/// for those we match strictly so an Owner of workspace A doesn't get
-/// authority over B.
+/// same workspace. For `Resource::Workspace(_)` we match strictly so an
+/// Owner of workspace A doesn't get authority over B. For
+/// `Resource::AppInstance`, `Component`, and `Page` we match
+/// workspace-agnostically and rely on the globally-unique UUID assumption
+/// (see `IMPLEMENTATION_PLAN.md §4.2` "Tenant-isolation note for resource
+/// ids"): every UUID is `Uuid::new_v4()` and never reused across
+/// workspaces, so two workspaces cannot share the same id.
+///
+/// `Resource::Field(String)` is also matched workspace-agnostically and is
+/// the one variant that does NOT carry a globally-unique guarantee
+/// (multiple workspaces can legitimately use the same field name). No
+/// Phase-1 `BuiltInRole` grants any permission on `Field`, so the surface
+/// is currently unreachable; the Phase-3 follow-up flagged in
+/// `IMPLEMENTATION_PLAN.md §4.2` must either qualify `Field` with a
+/// `ComponentId` or make this arm workspace-strict before any new role
+/// binds a `Field`.
 fn workspace_matches(binding_ws: WorkspaceId, resource: &Resource) -> bool {
     match resource {
         Resource::Workspace(target) => binding_ws == *target,

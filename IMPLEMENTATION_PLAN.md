@@ -300,20 +300,33 @@ The canonical permission gate at every bridge / CLI callsite is the
 (re-exported from `liquid_permissions`). It awaits `check` and returns
 `Err(LiquidError::Forbidden)` from the enclosing `async fn` on denial.
 
-**Tenant-isolation note for resource UUIDs.** `check(principal,
+**Tenant-isolation note for resource ids.** `check(principal,
 action, resource)` is workspace-strict for `Resource::Workspace(_)`
 (matched against the binding's stored `workspace`), and
-workspace-agnostic for `Resource::AppInstance|Component|Page|Field`.
-The latter relies on the **globally-unique UUID assumption**: every
-`AppInstanceId` / `ComponentId` / `PageId` is generated via
-`uuid::Uuid::new_v4()` and never reused across workspaces, so a
-binding for a UUID in workspace A cannot accidentally match a
-different-workspace check on the same UUID — the UUID would have to
-exist in both workspaces, which the ID generation rules out. Callers
-constructing `Resource::AppInstance(id)` from external input MUST
-still validate the UUID belongs to the workspace they intend to act
-on; the index does not re-derive that mapping. Phase 3's distributed
-backend will revisit this if cross-workspace UUID reuse ever becomes
+workspace-agnostic for the remaining four `Resource` variants. The
+matching strategy varies by variant:
+
+- `Resource::AppInstance(_)`, `Resource::Component(_)`,
+  `Resource::Page(_)` — relies on the **globally-unique UUID
+  assumption**: every `AppInstanceId` / `ComponentId` / `PageId` is
+  `uuid::Uuid::new_v4()` and never reused across workspaces, so a
+  binding for a UUID in workspace A cannot accidentally match a
+  different-workspace check on the same UUID. The UUID would have to
+  exist in both workspaces, which `new_v4` rules out by birthday-
+  bound construction.
+- `Resource::Field(String)` — has no globally-unique guarantee
+  (`"email"` is a likely field name in many workspaces). No Phase-1
+  `BuiltInRole` grants any permission on `Field` (see §9 role
+  matrix), so the surface is unreachable today. Before any Phase-3
+  role binds `Field`, either `Resource::Field` must carry a
+  qualifying id (e.g. `Field { component: ComponentId, name: String
+  }`) OR the index's `workspace_matches` arm must become
+  workspace-strict for `Field`. Tracked as a Phase-3 design item.
+
+Callers constructing any `Resource::*` variant from external input
+MUST validate the id belongs to the workspace they intend to act on;
+the index does not re-derive that mapping. Phase 3's distributed
+backend will revisit this if cross-workspace id reuse ever becomes
 desirable (e.g. workspace migration).
 
 ### 4.3 ReadCache (`liquid-cache`)
@@ -476,7 +489,10 @@ three files, reads them back, undoes the last write, and verifies the
 file is gone — passes against both `FilesystemContentStore` (today) and
 `JujutsuContentStore` (when TASK-004 lands). On-disk durability is
 proven by re-opening the same root in a fresh process and reading the
-data back.
+data back. Manual validation:
+[`docs/manual-validation-m1-m3.md`](docs/manual-validation-m1-m3.md)
+§M2 plus the runnable
+`core/liquid-vcs/examples/m2_walkthrough.rs`.
 
 ---
 
