@@ -41,18 +41,22 @@ test-rust-filtered:
     bash -c 'set -o pipefail; cargo test --manifest-path core/Cargo.toml --workspace 2>&1 | .claude/hooks/filter-test-output.sh'
 
 # Lint Rust (format check + clippy)
+# `cargo fmt` needs `--all` when `--manifest-path` is set; without it
+# rustfmt 1.8+ errors with "Failed to find targets". Matches the CI
+# invocation in .github/workflows/ci.yml (which uses
+# `working-directory: core` + `cargo fmt --all --check`).
 lint-rust:
-    cargo fmt --manifest-path core/Cargo.toml --check
+    cargo fmt --all --manifest-path core/Cargo.toml --check
     cargo clippy --manifest-path core/Cargo.toml --all-targets -- -D warnings
 
 # Lint Rust, piping clippy output through filter-test-output.sh
 lint-rust-filtered:
-    bash -c 'set -o pipefail; cargo fmt --manifest-path core/Cargo.toml --check 2>&1 | .claude/hooks/filter-test-output.sh'
+    bash -c 'set -o pipefail; cargo fmt --all --manifest-path core/Cargo.toml --check 2>&1 | .claude/hooks/filter-test-output.sh'
     bash -c 'set -o pipefail; cargo clippy --manifest-path core/Cargo.toml --all-targets -- -D warnings 2>&1 | .claude/hooks/filter-test-output.sh'
 
 # Auto-fix Rust formatting
 fmt-rust:
-    cargo fmt --manifest-path core/Cargo.toml
+    cargo fmt --all --manifest-path core/Cargo.toml
 
 # Generate Rust coverage report (requires cargo-tarpaulin)
 coverage-rust:
@@ -70,17 +74,17 @@ cli *args:
 # ── Flutter app ───────────────────────────────────────────────────────────────
 
 # Run Flutter unit + widget tests (with coverage)
+# Skipped before M6 scaffolds `app/` — matches lefthook + CI behaviour.
 test-app:
-    cd app && flutter test --coverage
+    @sh -c '[ -f app/pubspec.yaml ] || { echo "(skip: app/pubspec.yaml not yet — see IMPLEMENTATION_PLAN.md §5.7)"; exit 0; }; cd app && flutter test --coverage'
 
 # Lint the Flutter app
 lint-app:
-    cd app && dart format --output=none --set-exit-if-changed .
-    cd app && flutter analyze
+    @sh -c '[ -f app/pubspec.yaml ] || { echo "(skip: app/pubspec.yaml not yet — see IMPLEMENTATION_PLAN.md §5.7)"; exit 0; }; cd app && dart format --output=none --set-exit-if-changed . && flutter analyze'
 
 # Auto-fix Flutter app formatting
 fmt-app:
-    cd app && dart format .
+    @sh -c '[ -f app/pubspec.yaml ] || { echo "(skip: app/pubspec.yaml not yet — see IMPLEMENTATION_PLAN.md §5.7)"; exit 0; }; cd app && dart format .'
 
 # Run the app on a desktop target (linux | macos | windows)
 run target="linux":
@@ -101,21 +105,21 @@ build-all:
 # ── SDK ───────────────────────────────────────────────────────────────────────
 
 # Run SDK tests (with coverage)
+# Skipped before M6 scaffolds `sdk/liquid_sdk/` — matches lefthook + CI behaviour.
 test-sdk:
-    cd sdk/liquid_sdk && flutter test --coverage
+    @sh -c '[ -f sdk/liquid_sdk/pubspec.yaml ] || { echo "(skip: sdk/liquid_sdk/pubspec.yaml not yet — see IMPLEMENTATION_PLAN.md §5.7)"; exit 0; }; cd sdk/liquid_sdk && flutter test --coverage'
 
 # Run SDK tests, piping output through filter-test-output.sh
 test-sdk-filtered:
-    bash -c 'set -o pipefail; (cd sdk/liquid_sdk && flutter test) 2>&1 | .claude/hooks/filter-test-output.sh'
+    @sh -c '[ -f sdk/liquid_sdk/pubspec.yaml ] || { echo "(skip: sdk/liquid_sdk/pubspec.yaml not yet)"; exit 0; }; (cd sdk/liquid_sdk && flutter test) 2>&1 | .claude/hooks/filter-test-output.sh'
 
 # Lint the SDK
 lint-sdk:
-    cd sdk/liquid_sdk && dart format --output=none --set-exit-if-changed .
-    cd sdk/liquid_sdk && flutter analyze
+    @sh -c '[ -f sdk/liquid_sdk/pubspec.yaml ] || { echo "(skip: sdk/liquid_sdk/pubspec.yaml not yet — see IMPLEMENTATION_PLAN.md §5.7)"; exit 0; }; cd sdk/liquid_sdk && dart format --output=none --set-exit-if-changed . && flutter analyze'
 
 # Auto-fix SDK formatting
 fmt-sdk:
-    cd sdk/liquid_sdk && dart format .
+    @sh -c '[ -f sdk/liquid_sdk/pubspec.yaml ] || { echo "(skip: sdk/liquid_sdk/pubspec.yaml not yet)"; exit 0; }; cd sdk/liquid_sdk && dart format .'
 
 # ── CLI bats tests ────────────────────────────────────────────────────────────
 
@@ -137,6 +141,23 @@ ai-check:
 sync-docs-check:
     ./scripts/sync-docs-check.sh
 
+# cargo-deny gate — advisories, licenses, bans, sources.
+# Mirrors the EmbarkStudios/cargo-deny-action invocation in
+# .github/workflows/audit.yml so local runs and CI fail on identical input.
+# Requires `cargo install --locked cargo-deny` (or the binary from
+# https://github.com/EmbarkStudios/cargo-deny/releases).
+deny-check:
+    cargo deny --manifest-path core/Cargo.toml check --config deny.toml
+
+# Atomically bump LIQUID_VERSION across `core/Cargo.toml`:
+# `[workspace.package].version` AND every `liquid-* = { path =
+# "...", version = "..." }` literal in `[workspace.dependencies]`.
+# Wrapped script lives at `scripts/bump-version.sh`; bats coverage
+# at `tests/cli/02_bump_version.bats`. Run before `cargo release`
+# at every Phase milestone so path-dep version literals never drift.
+bump-version new:
+    ./scripts/bump-version.sh {{new}}
+
 # ── Combined ──────────────────────────────────────────────────────────────────
 
 # Run ALL tests across every layer
@@ -148,5 +169,5 @@ lint: lint-rust lint-app lint-sdk
 # Auto-fix ALL formatting
 fmt: fmt-rust fmt-app fmt-sdk
 
-# Full pre-push validation (same as CI)
-check: lint test
+# Full pre-push validation (same as CI: lint → test → cargo-deny)
+check: lint test deny-check

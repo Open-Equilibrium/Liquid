@@ -66,6 +66,7 @@ For decisions that contradict or extend an existing ADR, add a new ADR in
 | `lefthook` | latest | `npm install -g @evilmartians/lefthook` |
 | Docker | 24+ | <https://docs.docker.com/get-docker/> *(only needed for `just services-up` in Phase 3)* |
 | `bats` | latest | <https://bats-core.readthedocs.io/en/stable/installation.html> *(only needed once `tests/cli/` exists)* |
+| `cargo-deny` | latest | `cargo install --locked cargo-deny` *(needed for `just deny-check` / `just check`; lefthook's `pre-push` and CI's `audit.yml` run the same gate)* |
 
 ### First-time setup
 
@@ -81,7 +82,7 @@ cargo test --manifest-path core/Cargo.toml --workspace   # sanity-check
 just test          # all tests (Rust now; Flutter + SDK + CLI bats as they land)
 just lint          # all linters (clippy + dart analyze + dart format)
 just fmt           # auto-fix all formatting
-just check         # full pre-push validation: lint + test (matches CI)
+just check         # full pre-push validation: lint → test → deny-check (matches CI)
 just run           # flutter run -d linux  (or macos / windows)  — when M6 lands
 just cli -- --help # run the liquid CLI                          — when M7 lands
 just services-up   # start Redis / Redpanda                       — Phase 3+
@@ -203,6 +204,15 @@ as a follow-up:
   the `## [Unreleased]` heading
 - Design decision contradicting/extending an existing one → new ADR in
   [`docs/adr/`](docs/adr/)
+
+The CHANGELOG-discipline `commit-msg` hook
+(`.lefthook/commit-msg/check-changelog.sh`) enforces this for the
+behaviour-change types: any `feat(*)` / `fix(*)` / `refactor(*)` /
+`perf(*)` / `chore(<non-tooling-scope>)` commit must either modify
+`CHANGELOG.md` in the same commit or carry a `[no-changelog]`
+trailer with a one-line justification. `docs(*)`, `test(*)`, and
+`chore(ci|claude|deps|ai|gh|tooling)` are exempt. Covered by 14
+bats cases in `tests/cli/04_changelog_gate.bats`.
 
 For projects working with AI agents, the
 [`.claude/skills/sync-docs/SKILL.md`](.claude/skills/sync-docs/SKILL.md)

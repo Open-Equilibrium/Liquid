@@ -12,6 +12,16 @@ members = [
 ]
 
 [workspace.package]
+# ── LIQUID_VERSION ─────────────────────────────────────────────────────────────
+# Single source of truth for the workspace release version. The literal
+# here AND every `liquid-* = { path = "...", version = "..." }` literal in
+# [workspace.dependencies] below must move in lock-step.
+#
+# DO NOT edit by hand. Run:
+#   just bump-version <new-semver>
+# which invokes `scripts/bump-version.sh` to rewrite all 8 occurrences
+# atomically (1 here + 7 path-deps). Covered by
+# `tests/cli/02_bump_version.bats`.
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
@@ -28,7 +38,7 @@ rust-version = "1.94"
 # cargo-deny (and crates.io's path-publish requirement) sees an explicit
 # version constraint rather than treating these as wildcard deps. The
 # version literal here is kept in lock-step with [workspace.package].version
-# above — bump both together at release time.
+# above — `just bump-version <new-semver>` rewrites both atomically.
 liquid-core = { path = "liquid-core", version = "0.1.0" }
 liquid-vcs = { path = "liquid-vcs", version = "0.1.0" }
 liquid-auth = { path = "liquid-auth", version = "0.1.0" }

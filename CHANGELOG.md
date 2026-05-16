@@ -18,6 +18,189 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed
+
+- `.claude/scripts/gh-job-log`:
+  - Per-step bucketing now handles the `gh run view --log-failed`
+    tab-separated format (`TIMESTAMP\tJOB\tSTEP\tLINE`) in addition
+    to the raw zip's `##[group]` markers. The original parser was
+    a no-op on the gh path; the "last 50 lines per failed step"
+    cap is now honoured on both code paths.
+  - Step files in the run-log zip are now concatenated in
+    chronological order via `sort -zV` (version-sort) instead of
+    lexicographic `sort -z` — jobs with 10+ steps used to read
+    `step 10` before `step 2`.
+  - Tempfile / unzip-dir cleanup is now governed by a `RETURN`
+    trap so an `xargs cat` failure no longer leaks the zip in
+    `/tmp/`.
+  - `run_id` and `job_id` arguments are validated as positive
+    integers (rejected at exit 2 if malformed), closing the
+    path-traversal class on the log filename composition.
+  - 7 bats cases in `tests/cli/05_gh_job_log.bats` cover the
+    network-free paths: arity / input-validation, raw-mode
+    bucketing, gh-mode bucketing, 200-line total cap.
+
+- `justfile` (`lint-rust`, `lint-rust-filtered`, `fmt-rust`) and
+  `lefthook.yml` (`rust-fmt`): pass `--all` to `cargo fmt` when
+  `--manifest-path` is set. rustfmt 1.8+ errors with "Failed to
+  find targets" without `--all`, which silently broke `just check`
+  (and `just lint`) for any contributor on the current pinned
+  toolchain. CI already uses the equivalent form (`cd core &&
+  cargo fmt --all --check` via `working-directory: core`), so the
+  bug was local-only. No source files reformatted by the fix.
+- `justfile` Flutter recipes (`test-app`, `lint-app`, `fmt-app`,
+  `test-sdk`, `lint-sdk`, `fmt-sdk`, `test-sdk-filtered`): skip
+  with a friendly "pubspec.yaml not yet — see
+  IMPLEMENTATION_PLAN.md §5.7" message when the layer hasn't been
+  scaffolded. Matches the existing skip-when-absent pattern in
+  `lefthook.yml` and the `detect`-layer gating in CI. Without
+  this, `just check` and `just lint` fail on a fresh clone before
+  M6 lands.
+
+### Documentation
+
+- `docs/ops/branch-protection.md` (new) — maintainer checklist for
+  enabling GitHub branch-protection on `main`. Names the exact
+  required CI checks (`Rust (ubuntu-latest)`, `CLI bats tests`,
+  `cargo audit`, `cargo deny`, `ai-check`, `sync-docs`) and the
+  additional settings (require PR, dismiss stale approvals,
+  require linear history, disallow force-pushes and deletions).
+  GitHub branch-protection rules cannot be applied from CI
+  without admin credentials; the doc is therefore the auditable
+  checklist for the maintainer task.
+- `tests/cli/README.md` (new) — explicit "skip-only until M6.5"
+  status note. Distinguishes the **live** tests
+  (`01_branch_name_gate.bats`, `02_bump_version.bats`,
+  `03_pre_commit_review_hook.bats`, `04_changelog_gate.bats`) from
+  the M6.5-pending spec scaffold (`00_mvp_slice.bats`, mostly
+  `skip "pending M6.5"`). Reviewers can now reject "CLI test
+  added" PR claims that turn out to be all-skip.
+- `.github/PULL_REQUEST_TEMPLATE.md` — new "Coverage claim"
+  author-checklist item asking the PR author to label any "CLI
+  integration test added" claim as either *live* or
+  *skip-pending-M6.5*.
+
+### Changed
+
+- `deny.toml` license allow-list trimmed: removed `Zlib`,
+  `Unicode-DFS-2016`, and `CC0-1.0` — none were in use by any crate
+  in the current dependency graph, and cargo-deny was emitting
+  `license-not-encountered` warnings on every run. The principle is
+  "add allowances as a real new transitive dependency requires them,
+  never speculatively"; the failure mode for a removed-too-eagerly
+  license is a clean cargo-deny error pointing at the rejecting
+  crate, which lets the maintainer audit and re-add intentionally.
+  Note: `Unicode-3.0` was on the trim list per the original goal,
+  but `unicode-ident-1.0.24` ships under `(MIT OR Apache-2.0) AND
+  Unicode-3.0` — the AND makes it mandatory — so it stays. `ISC`
+  and `BSD-2-Clause` are also currently unmatched but kept (commonly
+  required by future transitive deps; they will be revisited when
+  they appear in `cargo-deny check` warnings again).
+
+### Added
+
+- `scripts/bump-version.sh` + `just bump-version <new-semver>`
+  recipe — single source-of-truth bump for the workspace release
+  version. Atomically rewrites `[workspace.package].version` AND
+  every `liquid-* = { path = "...", version = "..." }` literal in
+  `[workspace.dependencies]` of `core/Cargo.toml`. Eliminates the
+  drift class where bumping the workspace version forgot one of
+  the 7 path-dep version literals (cargo treats path-only deps as
+  wildcards, which trips cargo-deny's `wildcards = "deny"` rule;
+  the path-dep literal MUST track the workspace version at all
+  times). The `core/Cargo.toml` workspace.package block now carries
+  a "LIQUID_VERSION" header comment pointing future maintainers at
+  the script. Covered by 8 bats cases in
+  `tests/cli/02_bump_version.bats` (semver acceptance, idempotency,
+  pre-release tags, leaves rust-version + third-party deps
+  untouched).
+
+- `commit-msg` lefthook step `changelog-discipline` running
+  `.lefthook/commit-msg/check-changelog.sh`. Rejects `feat(*)` /
+  `fix(*)` / `refactor(*)` / `perf(*)` / `chore(<non-tooling-scope>)`
+  commits that do not modify `CHANGELOG.md` and do not carry a
+  `[no-changelog]` trailer. Exempts `docs(*)`, `test(*)`, and
+  `chore(ci|claude|deps|ai|gh|tooling)`. Covered by 14 bats cases
+  in `tests/cli/04_changelog_gate.bats`. Documented in
+  `CONTRIBUTING.md` "Documentation as part of the change".
+
+
+- `.claude/rules/log-volume.md` — formalises the "any command output
+  >50 lines must go through filter-test-output.sh, test-triager, or
+  gh-job-log" discipline that was scattered across the goal block,
+  the operating-mode bullets in CLAUDE.md, and a few skill files.
+  Now a single authoritative rule cited from `CLAUDE.md` Rules and
+  the `implement` skill's Operating-mode section.
+
+- `.claude/scripts/gh-job-log` — GitHub Actions workflow-log
+  fetcher. `bash .claude/scripts/gh-job-log <run_id> [<job_id>]`
+  pulls the run log via `gh run view --log-failed` (or `curl` + the
+  REST API when `gh` is absent), writes the raw output to
+  `.ai/artifacts/logs/gh-job-<run_id>-<ts>.log`, and prints only the
+  last 50 lines of every failed step. Cited by the new `log-volume`
+  rule as the canonical way to surface CI failures without pasting
+  the full log into chat.
+
+- `.claude/agents/github-pr.md` — dedicated read-only GitHub
+  inspector subagent (haiku). Restricted to the `mcp__github__*` read
+  tools only (no comment / merge / push capability). Use for "what's
+  the state of PR #N?", "which open PRs touch crate X?", "is there
+  an open issue about Y?", etc. Writes still go through the main
+  agent invoking the matching `mcp__github__*` write tool directly.
+- `scripts/ai-check.sh` step 3b: assert every `.claude/agents/*.md`
+  file on disk is mentioned in CLAUDE.md (catches the inverse of
+  step 3 — a new agent added to disk but forgotten in the docs).
+
+- `.claude/hooks/pre-commit-review.sh` — `PreToolUse` hook matched on
+  `Bash(git commit -*)` and `Bash(git commit --*)` (tight patterns
+  so `git commit-tree` / `git commit-graph` plumbing does not
+  trigger the hook). Snapshots `git diff --staged` to
+  `.ai/artifacts/diffs/pre-commit-<ts>.diff`, returns the documented
+  `{"hookSpecificOutput": {"permissionDecision": "ask",
+  "permissionDecisionReason": "..."}}` PreToolUse envelope, and
+  asks the agent to spawn the `code-reviewer` subagent against the
+  snapshot before the commit lands. The subagent's `critical` array
+  is the block; warnings and suggestions remain advisory. Two
+  opt-out paths: `LIQUID_SKIP_PRE_COMMIT_REVIEW=1` in the host env
+  before starting Claude Code (for a long rebase session), or a
+  `[skip-review]` token in the commit message (parsed from the
+  tool-call command on stdin via jq, for a single
+  conflict-resolution commit). Snapshot retention caps the
+  diffs/ tree at the most recent 20 entries. Empty staged diff is a
+  silent no-op. Covered by 7 bats cases in
+  `tests/cli/03_pre_commit_review_hook.bats`.
+
+- Pre-push branch-name gate (`scripts/check-branch-name.sh`, wired
+  into `lefthook.yml`'s `pre-push` hook). Rejects pushes from `main`,
+  bare `claude`, or any `claude/*` branch — the Claude Code agent
+  autobranch namespace — forcing the change onto a `feature/<topic>`
+  / `fix/<topic>` branch before it can reach the remote. Eleven bats
+  cases in `tests/cli/01_branch_name_gate.bats` cover the gate
+  (exact-match `main`, `claude` family including nested paths,
+  substring-only acceptances like `feat/handle-claude-feedback` and
+  `feat/main-page-redesign`, and the empty-string caller-bug path
+  that exits 2 instead of silently falling through to git detection).
+
+- `just deny-check` recipe and matching pre-push lefthook step
+  wrapping `cargo deny --manifest-path core/Cargo.toml check --config
+  deny.toml`. `just check` now chains `lint → test → deny-check`, so
+  every local pre-push validation cycle catches advisory / license /
+  ban regressions that previously only fired on CI (the
+  EmbarkStudios/cargo-deny-action job in `.github/workflows/audit.yml`).
+  `cargo-deny` is now listed in `CONTRIBUTING.md`'s prerequisites
+  table; install with `cargo install --locked cargo-deny`.
+
+### Changed
+
+- `.claude/settings.json`: tightened the `git push --force` / `git push
+  -f` deny patterns into four narrow literals (`--force`, `--force *`,
+  `-f`, `-f *`) so they no longer match `--force-with-lease`, and added
+  `Bash(git push --force-with-lease*)` to the allow list. Agents must
+  use `--force-with-lease` (never bare `--force`) when a rebase or
+  rewrite has to overwrite a remote feature branch — it refuses the
+  push if anyone else updated the ref in the meantime, preventing the
+  silent overwrite that bare `--force` enables.
+
 ### Added
 
 - `liquid-permissions::FilesystemPermissionIndex` — TOML-backed

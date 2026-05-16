@@ -182,7 +182,7 @@ just build-all     # flutter build for all 5 platforms
 just run           # flutter run -d linux
 just cli -- --help # run the liquid CLI
 just services-up   # start Redis / Redpanda via Docker Compose (Phase 3+)
-just check         # full pre-push validation (lint + test)
+just check         # full pre-push validation (lint → test → deny-check)
 just ai-check      # validate repo-local .claude/ configuration
 ```
 
@@ -262,10 +262,35 @@ git so it works identically on cloud Claude Code and local sessions.
 - `ui-validator` (sonnet, read-only) — validates Flutter UI via existing
   widget/integration/golden tooling. Does not add Playwright.
 - `code-reviewer` (sonnet, read-only) — reviews the current diff.
+- `github-pr` (haiku, read-only) — inspects PRs, issues, branches,
+  commits, and CI status on `open-equilibrium/liquid` via the
+  `mcp__github__*` read tools only. Cannot push, comment, merge, or
+  modify any GitHub state — for writes, the main agent calls the
+  matching `mcp__github__*` write tool directly.
 
 ### Rules (`.claude/rules/`)
 Rules are merged into context for matching paths: `testing.md`, `rust.md`
-(Cargo paths), `flutter.md` (Dart/Flutter paths).
+(Cargo paths), `flutter.md` (Dart/Flutter paths), `log-volume.md`
+(governs how any command expected to emit >50 lines must be routed —
+through `.claude/hooks/filter-test-output.sh`, the `test-triager`
+subagent, or `.claude/scripts/gh-job-log`; raw logs go to
+`.ai/artifacts/logs/`, summaries go to chat).
+
+### Branch-name gate (`scripts/check-branch-name.sh`)
+
+A `pre-push` lefthook step rejects any push from a branch whose name
+is one of:
+
+- exactly `main` (changes land on `main` via PR review, not direct
+  push)
+- exactly `claude`, or any branch starting with `claude/` — the
+  Claude Code agent autobranch namespace
+
+Agents and humans must rebase onto a `feature/<topic>` or
+`fix/<topic>` branch and push there. Substring matches are not
+blocked, so legitimate branches like `feat/handle-claude-feedback`
+or `feat/main-page-redesign` are unaffected. Covered by 11 cases in
+`tests/cli/01_branch_name_gate.bats`.
 
 ### Hooks (`.claude/hooks/`)
 - `session-start.sh` — `SessionStart` hook. Logs toolchain versions, branch,
@@ -274,6 +299,24 @@ Rules are merged into context for matching paths: `testing.md`, `rust.md`
   reaches the chat.
 - `save-artifacts.sh` — `PostToolUse` hook on `Edit|Write`. Snapshots
   `git status` and `git diff --stat` to `.ai/artifacts/diffs/`.
+- `pre-commit-review.sh` — `PreToolUse` hook on
+  `Bash(git commit -*)` and `Bash(git commit --*)` (the tight
+  patterns avoid matching `git commit-tree` and `git commit-graph`).
+  Snapshots `git diff --staged` to `.ai/artifacts/diffs/pre-commit-*.diff`
+  and returns
+  `hookSpecificOutput.permissionDecision = "ask"` so the harness
+  asks the agent to spawn the `code-reviewer` subagent on the
+  snapshot before the commit lands. The subagent is the gate: a
+  non-empty `critical` array blocks the commit; warnings and
+  suggestions are advisory and surface via
+  `permissionDecisionReason`. Two opt-outs:
+  - `LIQUID_SKIP_PRE_COMMIT_REVIEW=1` in the host env (set before
+    starting Claude Code) for a long rebase session;
+  - `[skip-review]` token in the commit message body for a single
+    conflict-resolution commit.
+  Empty staged diffs are a silent no-op. Snapshot files are pruned
+  to the most recent 20. Covered by 7 cases in
+  `tests/cli/03_pre_commit_review_hook.bats`.
 - `filter-test-output.sh` — manual helper. Pipe noisy output through it:
   ```sh
   cargo test 2>&1 | .claude/hooks/filter-test-output.sh
@@ -293,6 +336,17 @@ Rules are merged into context for matching paths: `testing.md`, `rust.md`
   Google/Firebase service files, keystores, `*.p12`) and destructive shell
   commands (`rm -rf`, `curl|sh`, `git push --force/-f`, `git reset --hard`,
   `git clean -f`, hook bypass via `--no-verify`).
+- **Force-pushes:** `git push --force` / `git push -f` (bare or with
+  trailing args) stay denied via four narrow deny patterns
+  (`Bash(git push --force)`, `Bash(git push --force *)`,
+  `Bash(git push -f)`, `Bash(git push -f *)`) — the patterns are
+  intentionally tight so they do **not** swallow `--force-with-lease`,
+  which is explicitly allowed via `Bash(git push --force-with-lease*)`.
+  Always prefer `--force-with-lease` over plain `--force` when a rebase
+  or rewrite has to overwrite a remote feature branch — it aborts if
+  anyone else pushed to the same ref in the meantime, preventing the
+  silent obliterate-someone-else's-work failure mode that bare `--force`
+  enables.
 
 ### Scripts (`.claude/scripts/`)
 - `py` — vetted Python entry point. Replaces the previous blanket
@@ -300,6 +354,20 @@ Rules are merged into context for matching paths: `testing.md`, `rust.md`
   (`json-pretty`, `json-check`, `yaml-check`, `hash`, `version`). To add
   a new use case, extend the script and review the change; never bypass
   the wrapper with `python3 -c "<arbitrary>"`.
+- `gh-job-log` — fetches GitHub Actions logs for a failed run and
+  surfaces only the failure-relevant tail. Usage:
+  ```sh
+  .claude/scripts/gh-job-log <run_id>          # whole run
+  .claude/scripts/gh-job-log <run_id> <job_id> # single job
+  ```
+  Uses the `gh` CLI when available (`gh run view --log-failed`);
+  otherwise falls back to the GitHub REST API via `curl` with
+  `$GH_TOKEN` and `$GH_REPO` set. Writes the raw log to
+  `.ai/artifacts/logs/gh-job-<run_id>-<ts>.log` and prints the
+  last 50 lines of every failed step to stdout. Cited by the
+  `log-volume` rule (`.claude/rules/log-volume.md`) as the canonical
+  way to bring CI failures into the chat without pasting the full
+  log.
 
 ### Project commands quick reference
 
