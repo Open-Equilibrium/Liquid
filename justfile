@@ -74,17 +74,17 @@ cli *args:
 # ── Flutter app ───────────────────────────────────────────────────────────────
 
 # Run Flutter unit + widget tests (with coverage)
+# Skipped before M6 scaffolds `app/` — matches lefthook + CI behaviour.
 test-app:
-    cd app && flutter test --coverage
+    @sh -c '[ -f app/pubspec.yaml ] || { echo "(skip: app/pubspec.yaml not yet — see IMPLEMENTATION_PLAN.md §5.7)"; exit 0; }; cd app && flutter test --coverage'
 
 # Lint the Flutter app
 lint-app:
-    cd app && dart format --output=none --set-exit-if-changed .
-    cd app && flutter analyze
+    @sh -c '[ -f app/pubspec.yaml ] || { echo "(skip: app/pubspec.yaml not yet — see IMPLEMENTATION_PLAN.md §5.7)"; exit 0; }; cd app && dart format --output=none --set-exit-if-changed . && flutter analyze'
 
 # Auto-fix Flutter app formatting
 fmt-app:
-    cd app && dart format .
+    @sh -c '[ -f app/pubspec.yaml ] || { echo "(skip: app/pubspec.yaml not yet — see IMPLEMENTATION_PLAN.md §5.7)"; exit 0; }; cd app && dart format .'
 
 # Run the app on a desktop target (linux | macos | windows)
 run target="linux":
@@ -105,21 +105,21 @@ build-all:
 # ── SDK ───────────────────────────────────────────────────────────────────────
 
 # Run SDK tests (with coverage)
+# Skipped before M6 scaffolds `sdk/liquid_sdk/` — matches lefthook + CI behaviour.
 test-sdk:
-    cd sdk/liquid_sdk && flutter test --coverage
+    @sh -c '[ -f sdk/liquid_sdk/pubspec.yaml ] || { echo "(skip: sdk/liquid_sdk/pubspec.yaml not yet — see IMPLEMENTATION_PLAN.md §5.7)"; exit 0; }; cd sdk/liquid_sdk && flutter test --coverage'
 
 # Run SDK tests, piping output through filter-test-output.sh
 test-sdk-filtered:
-    bash -c 'set -o pipefail; (cd sdk/liquid_sdk && flutter test) 2>&1 | .claude/hooks/filter-test-output.sh'
+    @sh -c '[ -f sdk/liquid_sdk/pubspec.yaml ] || { echo "(skip: sdk/liquid_sdk/pubspec.yaml not yet)"; exit 0; }; (cd sdk/liquid_sdk && flutter test) 2>&1 | .claude/hooks/filter-test-output.sh'
 
 # Lint the SDK
 lint-sdk:
-    cd sdk/liquid_sdk && dart format --output=none --set-exit-if-changed .
-    cd sdk/liquid_sdk && flutter analyze
+    @sh -c '[ -f sdk/liquid_sdk/pubspec.yaml ] || { echo "(skip: sdk/liquid_sdk/pubspec.yaml not yet — see IMPLEMENTATION_PLAN.md §5.7)"; exit 0; }; cd sdk/liquid_sdk && dart format --output=none --set-exit-if-changed . && flutter analyze'
 
 # Auto-fix SDK formatting
 fmt-sdk:
-    cd sdk/liquid_sdk && dart format .
+    @sh -c '[ -f sdk/liquid_sdk/pubspec.yaml ] || { echo "(skip: sdk/liquid_sdk/pubspec.yaml not yet)"; exit 0; }; cd sdk/liquid_sdk && dart format .'
 
 # ── CLI bats tests ────────────────────────────────────────────────────────────
 

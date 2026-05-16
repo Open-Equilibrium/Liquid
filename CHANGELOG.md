@@ -48,6 +48,14 @@ moved into a real version section when a release is cut.
   toolchain. CI already uses the equivalent form (`cd core &&
   cargo fmt --all --check` via `working-directory: core`), so the
   bug was local-only. No source files reformatted by the fix.
+- `justfile` Flutter recipes (`test-app`, `lint-app`, `fmt-app`,
+  `test-sdk`, `lint-sdk`, `fmt-sdk`, `test-sdk-filtered`): skip
+  with a friendly "pubspec.yaml not yet — see
+  IMPLEMENTATION_PLAN.md §5.7" message when the layer hasn't been
+  scaffolded. Matches the existing skip-when-absent pattern in
+  `lefthook.yml` and the `detect`-layer gating in CI. Without
+  this, `just check` and `just lint` fail on a fresh clone before
+  M6 lands.
 
 ### Documentation
 
