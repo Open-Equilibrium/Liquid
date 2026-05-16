@@ -55,9 +55,15 @@ while IFS= read -r line; do
 done < README.md
 
 # ── Cross-check: every README ✅ has a CHANGELOG entry ───────────────────────
+# Milestone IDs may contain dots (M6.5). Escape every dot before stuffing
+# the id into an ERE so the dot does not act as a wildcard (which would
+# silently match M6X5 as well as M6.5).
+escape_ere() { printf '%s' "$1" | sed 's/\./\\./g'; }
+
 for m in "${readme_done[@]:-}"; do
   [ -z "$m" ] && continue
-  if grep -Eq "\b$m\b" CHANGELOG.md; then
+  m_esc=$(escape_ere "$m")
+  if grep -Eq "\b$m_esc\b" CHANGELOG.md; then
     : # ok
   else
     bad "$m marked ✅ Done in README.md but no mention in CHANGELOG.md"
@@ -67,9 +73,11 @@ done
 # ── Cross-check: every README ✅ has §5 evidence in IMPLEMENTATION_PLAN ──────
 for m in "${readme_done[@]:-}"; do
   [ -z "$m" ] && continue
+  m_esc=$(escape_ere "$m")
+  m_num_esc=$(escape_ere "${m#M}")
   # Accept either the legacy form "### 5.N Milestone N —" or the
   # versioned form "### 5.N Milestone M6.5 —".
-  if grep -Eq "^### 5\.[0-9]+ Milestone ($m|${m#M}) " IMPLEMENTATION_PLAN.md; then
+  if grep -Eq "^### 5\.[0-9]+ Milestone ($m_esc|$m_num_esc) " IMPLEMENTATION_PLAN.md; then
     : # ok
   else
     bad "$m marked ✅ Done in README.md but IMPLEMENTATION_PLAN.md §5 has no matching heading"

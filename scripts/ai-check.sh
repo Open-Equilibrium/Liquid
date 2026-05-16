@@ -53,10 +53,12 @@ hook_count=0
 for hook in .claude/hooks/*.sh; do
   [ -f "$hook" ] || continue
   hook_count=$((hook_count + 1))
-  if bash -n "$hook" 2>/dev/null; then
+  # Capture stderr so a real syntax error surfaces in the FAIL line — the
+  # previous `2>/dev/null` discarded the only useful diagnostic.
+  if err=$(bash -n "$hook" 2>&1); then
     ok "$hook (bash -n)"
   else
-    bad "$hook fails bash -n syntax check"
+    bad "$hook fails bash -n: $err"
   fi
 done
 if [ "$hook_count" -eq 0 ]; then
@@ -100,9 +102,12 @@ else
   tmpdir=$(mktemp -d)
   trap 'rm -rf "$tmpdir"' EXIT
   # Run from a scratch CWD so we do not pollute the repo's .ai/ tree.
+  # Capture the repo root explicitly rather than relying on $OLDPWD being
+  # set correctly inside the subshell.
+  repo_root=$(pwd)
   out=$(
     cd "$tmpdir"
-    "$OLDPWD/.claude/hooks/filter-test-output.sh" <"$OLDPWD/$fixture"
+    "$repo_root/.claude/hooks/filter-test-output.sh" <"$repo_root/$fixture"
   )
   if [ -n "$out" ] && printf '%s' "$out" | grep -qiE 'fail|error|panicked'; then
     ok "filter-test-output.sh emits failure-oriented summary"

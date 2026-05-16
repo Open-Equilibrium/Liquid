@@ -67,7 +67,7 @@ trait abstraction (ADR-005) means callers won't change.
 ### [TASK-008] Minimal agent CLI (M6.5)
 
 **Phase:** 1
-**Milestone:** M6.5 (IMPLEMENTATION_PLAN.md §5.7)
+**Milestone:** M6.5 (IMPLEMENTATION_PLAN.md §5.6)
 **Status:** Planned
 **Blocked by:** M5 FFI bridge
 
