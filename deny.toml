@@ -114,6 +114,23 @@ skip = [
     # resolves itself once argon2 ships a release on the new rand_core /
     # getrandom line. Revisit when bumping `argon2` past 0.5.x.
     { name = "getrandom" },
+    # Three semver-major `hashbrown` versions in the current
+    # lockfile, all upstream:
+    #
+    #   - 0.14.5 — pinned by `dashmap 6.1` (liquid-cache M4 backend).
+    #   - 0.15.5 — pinned by `wasmparser 0.244` (transitive via the
+    #     reqwest / hyper stack pulled in by `rustsec`-related dev
+    #     tooling; pre-existing).
+    #   - 0.17.0 — pulled by `toml 0.8` via `indexmap 2.x` +
+    #     `toml_edit 0.22` (liquid-auth + liquid-permissions
+    #     persistence).
+    #
+    # All three are upstream-pinned; we cannot unify them by
+    # bumping our own deps. The skip is unversioned so it covers
+    # all three transparently. Revisit each time a hashbrown-pinning
+    # dep ships a new release line — the goal is to get back to
+    # at most one major version when upstream converges.
+    { name = "hashbrown" },
 ]
 skip-tree = []
 

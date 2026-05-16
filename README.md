@@ -25,7 +25,7 @@ SDK, and reference apps land in subsequent phases.
 | **M1** Workspace + `liquid-core` primitives | `WorkspaceId`, `PrincipalId`, `LiquidError`, … | ✅ Done |
 | **M2** VCS layer | `ContentStore` trait + `InMemory` + `Filesystem` impls | ✅ Done (jj-lib backend deferred — see [ADR-001](docs/adr/001-jujutsu-pinning.md)) |
 | **M3** Auth + permissions | `LocalIdentityProvider` (Argon2id + HMAC) + `InMemoryPermissionIndex` + `FilesystemPermissionIndex` + `require_permission!` | ✅ Done |
-| **M4** Cache layer stub | `InProcessCache` behind `ReadCache` trait | 🔜 Next |
+| **M4** Cache layer stub | `ReadCache` trait + `InProcessCache` (`Arc<DashMap>`) + `CachedContentStore` wrapper warming on read / invalidating on write+undo | ✅ Done |
 | **M5** FFI bridge | `flutter_rust_bridge` surface | Planned |
 | **M6.5** Minimal agent CLI (gates M6 per CLAUDE.md rule 6) | `liquid workspace create`, `page read/write/undo`, `auth provision-agent/token`, `audit list` — drives the MVP slice (`tests/cli/00_mvp_slice.bats`) | Planned |
 | **M6** Flutter shell skeleton | `RootShell`, `ExplorerPanel`, `PageGrid` | Planned |

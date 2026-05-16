@@ -103,6 +103,44 @@ and the `--as` impersonation flag. Every mutation continues to run
 
 ## Done tasks
 
+### [TASK-010] M4 cache layer stub — `ReadCache` + `InProcessCache` + `CachedContentStore`
+
+**Phase:** 1
+**Milestone:** M4 (IMPLEMENTATION_PLAN.md §5.4)
+**Status:** Done
+
+**What.** Shipped the Phase-1 cache layer: `liquid-cache::ReadCache`
+trait + `InProcessCache` (`Arc<DashMap<ContentHash, Bytes>>`, no
+expiry per §9) + `liquid-vcs::CachedContentStore<S, C>` wrapping
+adapter that warms the cache on every `read` and invalidates the
+prior `ContentHash` on every `write` / `undo`. The wrapper
+maintains a `(WorkspaceId, StorePath) → ContentHash` index so the
+second read of a path serves from the cache without touching the
+inner store — the M4 plan-level success criterion. `undo`
+conservatively invalidates every cached hash for the affected
+workspace until TASK-004 (jj-lib backend) exposes per-op
+affected-paths for a precise invalidation. `ContentHash::of_bytes`
+helper added to `liquid-core` so SHA-256 hashing stays in one
+place and Absolute Rule 1 is upheld in the cache call-sites.
+
+**Acceptance criteria.**
+- [x] `cargo test -p liquid-cache` is green (8 trait + impl tests)
+- [x] `cargo test -p liquid-vcs --test cached_store` is green (7
+      wiring tests, including the SpyStore-counter success criterion
+      `second_read_of_same_path_is_served_from_cache`)
+- [x] `cargo test -p liquid-core` is green (30 tests, +4 for
+      `ContentHash::of_bytes` — RFC 6234 vectors, round-trip,
+      collision-free)
+- [x] `cargo fmt --check` and
+      `cargo clippy --workspace --all-targets --locked -- -D warnings`
+      clean
+- [x] No `unwrap()` / `expect()` outside `#[cfg(test)]`
+- [x] `IMPLEMENTATION_PLAN.md` §5.4 ticked and §4.3 trait shape
+      matches the shipped `liquid-cache::ReadCache`
+- [x] `deny.toml` `bans.skip` entry added for `hashbrown` (dashmap
+      6.1 pins 0.14, toml 0.8 pulls 0.17 transitively; same shape
+      as the existing `getrandom` skip)
+
 ### [TASK-007] Disk-backed `PermissionIndex`
 
 **Phase:** 1

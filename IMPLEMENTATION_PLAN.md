@@ -524,16 +524,34 @@ both.
 
 ### 5.4 Milestone 4 — Cache layer stub (week 7–8)
 
-- [ ] Implement `InProcessCache` in `liquid-cache`:
+- [x] Implement `InProcessCache` in `liquid-cache`:
   - `Arc<DashMap<ContentHash, Bytes>>` — thread-safe, no expiry in phase 1
   - `put` stores; `get` retrieves; `invalidate` removes
-- [ ] Wire into `ContentStore`: every `read` warms the cache; every `write`
-  calls `invalidate` on the old hash before returning the new CommitId
-- [ ] The `ReadCache` trait must be in `liquid-cache`; `InProcessCache` is
+- [x] Wire into `ContentStore`: every `read` warms the cache; every `write`
+  calls `invalidate` on the old hash before returning the new CommitId.
+  Shipped as `liquid_vcs::CachedContentStore<S, C>` — a wrapper
+  parametric over any `ContentStore` + any `ReadCache`. Maintains a
+  `(WorkspaceId, StorePath) → ContentHash` index so the second read
+  of a path can find its cached bytes without touching the inner
+  store; `undo` conservatively invalidates every cached hash for the
+  affected workspace (precise per-path invalidation waits on the
+  jj-lib backend in TASK-004 to expose per-op affected-paths).
+- [x] The `ReadCache` trait must be in `liquid-cache`; `InProcessCache` is
   one implementation. Phase 3 adds `RedisCache` without touching callers.
+- [x] `ContentHash::of_bytes(&[u8])` helper added to `liquid-core` so the
+  SHA-256 dependency stays in one crate and Absolute Rule 1 (no
+  `unwrap`/`expect` outside `#[cfg(test)]`) is not bent in cache
+  call-sites. RFC 6234 vectors covered by `liquid-core` tests.
 
-**Success criterion:** Second read of the same content hits the cache (verified
-by spying on the mock `ContentStore` — the second call must not reach Jujutsu).
+**Success criterion:** Second read of the same content hits the cache
+(verified in `core/liquid-vcs/tests/cached_store.rs` by a `SpyStore`
+that counts every inner-store call — `second_read_of_same_path_is_
+served_from_cache` asserts `read` was forwarded exactly once across
+two successive reads). Seven cache-wiring tests plus eight
+`InProcessCache`-trait tests cover read-warm, write-invalidate,
+undo-invalidate, miss-non-poisoning, content-addressable dedup
+across paths, and per-workspace tenancy isolation of the path→hash
+index.
 
 ---
 
