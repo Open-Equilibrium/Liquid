@@ -18,6 +18,108 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — codecov patch coverage on M6.5 (TASK-008 follow-up)
+
+- `core/liquid-sdk-bridge/src/registry.rs`: added
+  `filesystem_open_surfaces_io_err_when_root_cannot_be_created`
+  test that points the registry root through a regular-file path
+  (`fs::create_dir_all` rejects that with `NotADirectory` on
+  every platform), forcing the `io_err("create root", _)` arm
+  to execute. Closes the only remaining patch-coverage gap on
+  the M6.5 PR — the `io_err` helper body (lines 231-232) was
+  flagged by codecov because every happy-path test in the
+  registry suite skipped the I/O-error mapping.
+
+Result: `liquid-sdk-bridge/src/registry.rs` patch coverage
+95.65% → **100% (67/67 lines)**; workspace coverage
+94.14% → **94.36%** (+0.23%). All 23 bridge tests + 28
+workspace test groups + 104 bats cases continue to pass;
+clippy clean; fmt clean.
+
+### Fixed — Post-M6.5 audit (TASK-008 follow-up)
+
+- `core/liquid-core/src/ids.rs`: new
+  `impl std::str::FromStr for PrincipalId` accepting both long
+  (`user:<uuid>` / `agent:<uuid>`) and short (`u:<uuid>` /
+  `a:<uuid>`) forms — the canonical wire-form parser. Closes
+  the round-1 cross-layer divergence where the CLI accepted
+  the short form but the bridge did not. Both layers now
+  delegate to this `FromStr`. 7 new inline tests pin the
+  contract.
+- `core/liquid-cli/src/cmd/parse.rs` (new): extracts the
+  identical `workspace_id` / `op_id` parse helpers that the
+  audit / auth / page modules each copied — CLAUDE.md
+  anti-redundancy rule. The three handlers now share one
+  source of truth.
+- `core/liquid-cli/src/args.rs`: `audit list` clap doc said
+  "newest first" but the implementation explicitly reverses to
+  oldest-first (so `tail -n 1` returns the newest, per the
+  documented `--format json` NDJSON contract). Corrected the
+  `--help` text. The `page read` doc gains a note that pages
+  must be JSON-encoded (`--file` body source is stored
+  verbatim, but `read` will reject non-JSON content with
+  `InvalidInput`; a `--raw` flag is a planned M7 follow-up).
+- `core/liquid-cli/src/cmd/auth.rs`: `auth provision-agent`
+  output emitted `agent_id` as `"agent:<uuid>"` (the
+  `PrincipalId::Display` form). That mismatched
+  `data.workspace_id` which is a bare UUID. Now emits
+  `agent_id` as the bare UUID and adds a sibling `principal`
+  field carrying the full wire form for callers that want the
+  pre-assembled string.
+- `tests/cli/10_cli_subcommands.bats` grows to 16 cases (was
+  13) covering: `audit list --principal a:<uuid>` short-form
+  filter, `audit list --action Undo` discriminating from
+  `Write`, and the bootstrap edge case where the user exists
+  but the token file is missing (must surface an actionable
+  error pointing at `LIQUID_TOKEN` or
+  `$LIQUID_HOME/auth/users.toml` removal).
+
+### Added — M6.5 minimal agent CLI (TASK-008)
+
+- `core/liquid-cli/src/` — the seven §5.6 subcommands ship as a
+  real `liquid` binary (replaces the prior `exit 64` stub):
+  `workspace create`, `auth provision-agent`, `auth token`,
+  `page write`, `page read`, `audit list`, `page undo`. Every
+  command starts with `token::require → validate_token`; every
+  mutating arm calls `require_permission!` next (Absolute Rule 4).
+  `workspace create` on a fresh `$LIQUID_HOME` bootstraps a
+  default `cli` user + 32-byte HMAC secret + bearer token so the
+  first invocation has no manual setup. clap-derive arg parsing,
+  tokio current-thread runtime, NDJSON / text output via the
+  `Envelope { ok, data, records, error }` shape.
+- State layout under `$LIQUID_HOME` (defaults to `$HOME/.liquid`):
+  `auth/` (LocalIdentityProvider), `vcs/` (FilesystemContentStore),
+  `perm/` (FilesystemPermissionIndex), `registry/`
+  (FilesystemWorkspaceRegistry), `secret` (HMAC bytes), `token`
+  (bearer). Documented in §9 `liquid-cli` + §5.6.
+- `liquid_sdk_bridge::FilesystemWorkspaceRegistry` — durable
+  Phase-1 sibling to `InMemoryWorkspaceRegistry`. Persists to
+  `<root>/workspaces.toml` via atomic tmp-then-rename (same
+  ADR-001 idiom as `FilesystemContentStore` /
+  `FilesystemPermissionIndex`). The CLI re-opens it on every
+  invocation; workspace metadata survives process restart.
+  Backfills the §M5 follow-up flagged in `TASK-011`.
+- `tests/cli/00_mvp_slice.bats` flipped from skip-only to live:
+  6 / 6 cases pass end-to-end against the shipped binary
+  (workspace create → provision-agent → page write/read → audit
+  list → page undo → AppViewer-cannot-write negative).
+- `tests/cli/10_cli_subcommands.bats` (new, 13 cases) covers per-
+  subcommand edge cases the MVP slice does not: `--version`, no-
+  args help-exit, bootstrap files (secret + token), registry
+  cross-process persistence, `auth token` happy + no-token,
+  invalid workspace UUID, `--data` / `--file` mutual exclusion +
+  `--file` body source, NotFound on unknown read, `--action Write`
+  filter, text-format summary + stderr error.
+- `docs/manual-validation-m6.5.md` (new) — auditable companion to
+  `bats tests/cli/`; walks a human reviewer through bootstrap,
+  every subcommand happy path, the AppViewer-cannot-write
+  negative, surface invariants by inspection, and a
+  cross-process persistence smoke.
+- `justfile coverage-check` now passes `--exclude-files
+  'liquid-cli/*'` to tarpaulin, matching `.codecov.yml`'s
+  long-standing `core/liquid-cli/**` exemption (per §15 — the
+  CLI's behaviour test is bats, which tarpaulin does not see).
+
 ### Added — M5 Rust-side FFI bridge (TASK-011)
 
 - `liquid-sdk-bridge::BridgeServices<S, P, I, R>` — generic

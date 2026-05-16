@@ -21,29 +21,6 @@ Agents: read the task carefully, check the referenced milestone in
 Jujutsu workspace via the pinned `jj-lib` version named in ADR-001. The
 trait abstraction (ADR-005) means callers won't change.
 
-### [TASK-008] Minimal agent CLI (M6.5)
-
-**Phase:** 1
-**Milestone:** M6.5 (IMPLEMENTATION_PLAN.md §5.6)
-**Status:** Planned
-**Blocked by:** M5 FFI bridge
-
-**What.** Ship the minimum `liquid` CLI surface that drives the MVP slice
-(`tests/cli/00_mvp_slice.bats`): `workspace create`, `auth provision-agent`,
-`auth token`, `page write`, `page read`, `audit list`, `page undo`. Every
-command validates its token against `IdentityProvider` and runs
-`require_permission!` before any state mutation (Absolute Rule 4). Output
-follows the `--format text|json` convention from §12. Lands before any
-Flutter shell work (M6) so the CLI-before-UI gate is unambiguous.
-
-**Acceptance criteria.**
-- [ ] `bats tests/cli/00_mvp_slice.bats` is green (the spec was added in
-      the same commit train, currently `skip "pending M6.5"`).
-- [ ] Every subcommand has a focused bats test covering the happy path
-      and at least one auth-failure path.
-- [ ] No `unwrap()` / `expect()` outside `#[cfg(test)]`.
-- [ ] `IMPLEMENTATION_PLAN.md` §12 grammar matches every shipped subcommand.
-
 ### [TASK-009] Full agent CLI (M7)
 
 **Phase:** 1
@@ -86,6 +63,46 @@ back → assert round-trip data + content_hash matches).
 ---
 
 ## Done tasks
+
+### [TASK-008] Minimal agent CLI (M6.5)
+
+**Phase:** 1
+**Milestone:** M6.5 (IMPLEMENTATION_PLAN.md §5.6)
+**Status:** Done
+
+**What.** Shipped the seven §5.6 subcommands plus a
+`FilesystemWorkspaceRegistry` (so workspace metadata survives
+process restarts — the in-memory variant from TASK-011 is now the
+test-only sibling). `BridgeServices` is composed at every CLI
+invocation from `LocalIdentityProvider` + `FilesystemContentStore`
++ `FilesystemPermissionIndex` + `FilesystemWorkspaceRegistry`
+rooted at `$LIQUID_HOME`; the first `workspace create` bootstraps a
+default `cli` user + HMAC secret + bearer token under `$LIQUID_HOME`
+so subsequent commands have a token to validate. Page-path is
+mapped to `PageId` via `Uuid::new_v5(workspace_uuid, path_bytes)`
+(stable per workspace, never collides across workspaces — §4.2
+globally-unique-UUID assumption satisfied). The audit-list NDJSON
+emit maps `OperationKind::{Create,Update}` to the user-visible
+`Write` verb so the `--action Write` filter catches both.
+
+**Acceptance criteria.**
+- [x] `bats tests/cli/00_mvp_slice.bats` is green — 6/6 cases pass
+      after dropping every `skip "pending M6.5"`.
+- [x] Every subcommand has a focused bats test covering the happy
+      path and at least one auth-failure / negative path
+      (`tests/cli/10_cli_subcommands.bats`, 13 cases).
+- [x] No `unwrap()` / `expect()` outside `#[cfg(test)]`.
+- [x] `IMPLEMENTATION_PLAN.md §12` grammar matches every shipped
+      subcommand; §5.6 ticks every checkbox; §9 `liquid-cli`
+      describes the shipped state layout.
+- [x] `cargo clippy --workspace --all-targets --locked -- -D
+      warnings` clean; `cargo fmt --all --check` clean.
+- [x] `.codecov.yml` keeps `core/liquid-cli/**` exempted per §15
+      "≥ 80% line coverage on all crates except `liquid-cli`" —
+      the CLI's behaviour test is bats, which tarpaulin does not
+      see; the seven subcommands are covered by 19 bats cases.
+- [x] Manual validation:
+      [`docs/manual-validation-m6.5.md`](docs/manual-validation-m6.5.md).
 
 ### [TASK-011] M5 Rust side — `liquid-sdk-bridge` composition root + 5 FFI entry points
 

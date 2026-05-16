@@ -77,3 +77,82 @@ impl std::fmt::Display for PrincipalId {
         }
     }
 }
+
+/// Parse a `PrincipalId` from its wire form. Round-trips with
+/// [`std::fmt::Display`] — `"user:<uuid>"` ↔ `PrincipalId::User(_)`
+/// and `"agent:<uuid>"` ↔ `PrincipalId::Agent(_)`. Also accepts the
+/// short forms `"u:<uuid>"` / `"a:<uuid>"` produced by
+/// `liquid_auth::token` (token-payload encoding) and the
+/// `liquid audit list` NDJSON emit, so a
+/// `liquid audit list --principal "$(jq -r .principal)"` round-trips
+/// regardless of which layer produced the original string.
+impl std::str::FromStr for PrincipalId {
+    type Err = crate::LiquidError;
+
+    fn from_str(s: &str) -> crate::Result<Self> {
+        let (kind, id) = s.split_once(':').ok_or_else(|| {
+            crate::LiquidError::InvalidInput(format!("principal id missing prefix: {s}"))
+        })?;
+        let uuid = Uuid::parse_str(id).map_err(|e| {
+            crate::LiquidError::InvalidInput(format!("principal id not a uuid: {s}: {e}"))
+        })?;
+        match kind {
+            "u" | "user" => Ok(Self::User(uuid)),
+            "a" | "agent" => Ok(Self::Agent(uuid)),
+            other => Err(crate::LiquidError::InvalidInput(format!(
+                "principal kind not recognised: {other} (one of u, user, a, agent)"
+            ))),
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod principal_id_parse_tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn round_trips_user_long_form() {
+        let p = PrincipalId::new_user();
+        assert_eq!(PrincipalId::from_str(&p.to_string()).unwrap(), p);
+    }
+
+    #[test]
+    fn round_trips_agent_long_form() {
+        let p = PrincipalId::new_agent();
+        assert_eq!(PrincipalId::from_str(&p.to_string()).unwrap(), p);
+    }
+
+    #[test]
+    fn accepts_user_short_form() {
+        let id = Uuid::new_v4();
+        let parsed = PrincipalId::from_str(&format!("u:{id}")).unwrap();
+        assert_eq!(parsed, PrincipalId::User(id));
+    }
+
+    #[test]
+    fn accepts_agent_short_form() {
+        let id = Uuid::new_v4();
+        let parsed = PrincipalId::from_str(&format!("a:{id}")).unwrap();
+        assert_eq!(parsed, PrincipalId::Agent(id));
+    }
+
+    #[test]
+    fn rejects_missing_colon() {
+        let err = PrincipalId::from_str("no-prefix").unwrap_err();
+        assert!(matches!(err, crate::LiquidError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn rejects_unknown_kind() {
+        let err = PrincipalId::from_str("bot:00000000-0000-0000-0000-000000000000").unwrap_err();
+        assert!(matches!(err, crate::LiquidError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn rejects_bad_uuid() {
+        let err = PrincipalId::from_str("user:not-a-uuid").unwrap_err();
+        assert!(matches!(err, crate::LiquidError::InvalidInput(_)));
+    }
+}

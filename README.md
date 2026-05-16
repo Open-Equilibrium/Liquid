@@ -27,7 +27,7 @@ SDK, and reference apps land in subsequent phases.
 | **M3** Auth + permissions | `LocalIdentityProvider` (Argon2id + HMAC) + `InMemoryPermissionIndex` + `FilesystemPermissionIndex` + `require_permission!` | ✅ Done |
 | **M4** Cache layer stub | `ReadCache` trait + `InProcessCache` (`Arc<DashMap>`) + `CachedContentStore` wrapper warming on read / invalidating on write+undo | ✅ Done |
 | **M5** FFI bridge | `BridgeServices<S,P,I,R>` + 5 token-gated FFI methods + `WorkspaceRegistry` + `PageSnapshot` / `WorkspaceSummary` wire types | ✅ Rust side done (TASK-011); Dart-side codegen + `flutter test` pending TASK-012 (blocked on M6 scaffolding `app/` + `sdk/liquid_sdk/`) |
-| **M6.5** Minimal agent CLI (gates M6 per CLAUDE.md rule 6) | `liquid workspace create`, `page read/write/undo`, `auth provision-agent/token`, `audit list` — drives the MVP slice (`tests/cli/00_mvp_slice.bats`) | Planned |
+| **M6.5** Minimal agent CLI (gates M6 per CLAUDE.md rule 6) | `liquid workspace create`, `page read/write/undo`, `auth provision-agent/token`, `audit list` — drives the MVP slice (`tests/cli/00_mvp_slice.bats`) plus focused subcommand coverage (`tests/cli/10_cli_subcommands.bats`) | ✅ Done (TASK-008) |
 | **M6** Flutter shell skeleton | `RootShell`, `ExplorerPanel`, `PageGrid` | Planned |
 | **M7** Full agent CLI | Rest of [§12](IMPLEMENTATION_PLAN.md#12-agent-cli-specification): `workspace list/delete`, `page history`, `auth login/whoami`, `app …` | Planned |
 | Phases 2–4 | SDK, first-party apps, mobile, scale, ecosystem | See [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) |
@@ -86,7 +86,7 @@ full developer workflow and `just --list` for every available command.
 | **Operators / self-hosters** | `docs/operations/` *(populates in Phase 3)* |
 | **Contributors** to Liquid itself | [`CONTRIBUTING.md`](CONTRIBUTING.md) + [`DEVELOPER_INFO.md`](DEVELOPER_INFO.md) |
 | **Architecture & design rationale** | [`DEVELOPER_INFO.md`](DEVELOPER_INFO.md), [`docs/adr/`](docs/adr/), [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) |
-| **Auditors validating a Phase-1 milestone** | [`docs/manual-validation-m1-m3.md`](docs/manual-validation-m1-m3.md), [`docs/manual-validation-m4-m5.md`](docs/manual-validation-m4-m5.md) |
+| **Auditors validating a Phase-1 milestone** | [`docs/manual-validation-m1-m3.md`](docs/manual-validation-m1-m3.md), [`docs/manual-validation-m4-m5.md`](docs/manual-validation-m4-m5.md), [`docs/manual-validation-m6.5.md`](docs/manual-validation-m6.5.md) |
 | **AI agents working on this repo** | [`CLAUDE.md`](CLAUDE.md) — mandatory project workflow |
 
 ## Contributing

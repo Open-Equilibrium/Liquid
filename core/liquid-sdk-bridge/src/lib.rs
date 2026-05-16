@@ -20,6 +20,8 @@ pub mod registry;
 pub mod services;
 pub mod types;
 
-pub use registry::{InMemoryWorkspaceRegistry, WorkspaceRecord, WorkspaceRegistry};
+pub use registry::{
+    FilesystemWorkspaceRegistry, InMemoryWorkspaceRegistry, WorkspaceRecord, WorkspaceRegistry,
+};
 pub use services::BridgeServices;
 pub use types::{PageSnapshot, WorkspaceSummary};

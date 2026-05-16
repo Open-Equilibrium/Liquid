@@ -21,6 +21,7 @@ liquid-bindings.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
 serde.workspace = true
+toml = "0.8"
 uuid.workspace = true
 
 [dev-dependencies]

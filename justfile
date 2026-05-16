@@ -216,4 +216,4 @@ check-ci:
 # `scripts/setup-tooling.sh` (or
 # `cargo install --locked cargo-tarpaulin --version ^0.31`).
 coverage-check:
-    cargo tarpaulin --manifest-path core/Cargo.toml --workspace --skip-clean --fail-under 80 --out Stdout
+    cargo tarpaulin --manifest-path core/Cargo.toml --workspace --skip-clean --fail-under 80 --out Stdout --exclude-files 'liquid-cli/*'

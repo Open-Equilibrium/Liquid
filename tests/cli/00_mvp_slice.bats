@@ -32,6 +32,20 @@ setup() {
   # Each test gets its own LIQUID_HOME so writes do not bleed across tests.
   export LIQUID_HOME="$(mktemp -d -t liquid-mvp-XXXXXX)"
   export LIQUID_FORMAT="json"
+  # If `liquid` is not on PATH (the common local case — only CI
+  # installs the binary into /usr/local/bin), fall back to the
+  # cargo target dir so a developer can run `bats tests/cli/`
+  # right after `cargo build -p liquid-cli`.
+  if ! command -v liquid >/dev/null 2>&1; then
+    local target_bin="$BATS_TEST_DIRNAME/../../core/target/debug/liquid"
+    if [ -x "$target_bin" ]; then
+      export PATH="$(dirname "$target_bin"):$PATH"
+    fi
+  fi
+  # Tests that depend on `jq` skip if it is not installed.
+  if ! command -v jq >/dev/null 2>&1; then
+    skip "jq not installed"
+  fi
 }
 
 teardown() {
@@ -41,8 +55,6 @@ teardown() {
 }
 
 @test "MVP slice: workspace create returns a workspace id" {
-  skip "pending M6.5 — TASK-008"
-
   run liquid --format json workspace create demo-workspace
   [ "$status" -eq 0 ]
   ws_id="$(echo "$output" | jq -r '.data.workspace_id')"
@@ -50,11 +62,9 @@ teardown() {
 }
 
 @test "MVP slice: auth provision-agent returns a usable token" {
-  skip "pending M6.5 — TASK-008"
-
   ws_id="$(liquid --format json workspace create demo-workspace | jq -r '.data.workspace_id')"
   run liquid --format json auth provision-agent demo-agent \
-    --workspace "$ws_id" --role AppEditor
+    --workspace "$ws_id" --role WorkspaceMember
   [ "$status" -eq 0 ]
   token="$(echo "$output" | jq -r '.data.token')"
   [ -n "$token" ] && [ "$token" != "null" ]
@@ -63,11 +73,14 @@ teardown() {
 }
 
 @test "MVP slice: page write then read round-trip" {
-  skip "pending M6.5 — TASK-008"
 
   ws_id="$(liquid --format json workspace create demo-workspace | jq -r '.data.workspace_id')"
+  # Page writes need a role whose permission matrix permits Write on
+  # `Resource::Page` — `WorkspaceMember` does, per §9 / role.rs. The
+  # `AppViewer` / `AppEditor` family is AppInstance-scoped and is
+  # exercised in the negative test at the bottom of this file.
   export LIQUID_TOKEN="$(liquid --format json auth provision-agent demo-agent \
-    --workspace "$ws_id" --role AppEditor | jq -r '.data.token')"
+    --workspace "$ws_id" --role WorkspaceMember | jq -r '.data.token')"
 
   payload='{"title":"hello","body":"world"}'
 
@@ -84,11 +97,14 @@ teardown() {
 }
 
 @test "MVP slice: audit list surfaces the prior write" {
-  skip "pending M6.5 — TASK-008"
 
   ws_id="$(liquid --format json workspace create demo-workspace | jq -r '.data.workspace_id')"
+  # Page writes need a role whose permission matrix permits Write on
+  # `Resource::Page` — `WorkspaceMember` does, per §9 / role.rs. The
+  # `AppViewer` / `AppEditor` family is AppInstance-scoped and is
+  # exercised in the negative test at the bottom of this file.
   export LIQUID_TOKEN="$(liquid --format json auth provision-agent demo-agent \
-    --workspace "$ws_id" --role AppEditor | jq -r '.data.token')"
+    --workspace "$ws_id" --role WorkspaceMember | jq -r '.data.token')"
 
   liquid --format json page write /pages/welcome \
     --workspace "$ws_id" --data '{"v":1}' >/dev/null
@@ -104,11 +120,14 @@ teardown() {
 }
 
 @test "MVP slice: page undo reverses the most recent write" {
-  skip "pending M6.5 — TASK-008"
 
   ws_id="$(liquid --format json workspace create demo-workspace | jq -r '.data.workspace_id')"
+  # Page writes need a role whose permission matrix permits Write on
+  # `Resource::Page` — `WorkspaceMember` does, per §9 / role.rs. The
+  # `AppViewer` / `AppEditor` family is AppInstance-scoped and is
+  # exercised in the negative test at the bottom of this file.
   export LIQUID_TOKEN="$(liquid --format json auth provision-agent demo-agent \
-    --workspace "$ws_id" --role AppEditor | jq -r '.data.token')"
+    --workspace "$ws_id" --role WorkspaceMember | jq -r '.data.token')"
 
   op_id="$(liquid --format json page write /pages/welcome \
     --workspace "$ws_id" --data '{"v":1}' | jq -r '.data.operation_id')"
@@ -127,11 +146,16 @@ teardown() {
 }
 
 @test "MVP slice: AppViewer is rejected on page write (Absolute Rule 4)" {
-  skip "pending M6.5 — TASK-008"
-
   ws_id="$(liquid --format json workspace create demo-workspace | jq -r '.data.workspace_id')"
+  # AppViewer is AppInstance-scoped per §9 / role.rs. The CLI does
+  # not generate an AppInstance for us (Phase-1 has no `app
+  # install` subcommand yet — M7), so we supply a fresh UUID as
+  # the scope. The role still doesn't permit Write on Page, which
+  # is what the negative test exists to prove.
+  scope_uuid="$(uuidgen 2>/dev/null || python3 -c 'import uuid; print(uuid.uuid4())')"
   viewer_token="$(liquid --format json auth provision-agent demo-viewer \
-    --workspace "$ws_id" --role AppViewer | jq -r '.data.token')"
+    --workspace "$ws_id" --role AppViewer --scope "$scope_uuid" | jq -r '.data.token')"
+  [ -n "$viewer_token" ] && [ "$viewer_token" != "null" ]
 
   LIQUID_TOKEN="$viewer_token" run liquid --format json page write /pages/welcome \
     --workspace "$ws_id" --data '{"v":1}'
