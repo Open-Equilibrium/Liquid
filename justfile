@@ -137,6 +137,14 @@ ai-check:
 sync-docs-check:
     ./scripts/sync-docs-check.sh
 
+# cargo-deny gate — advisories, licenses, bans, sources.
+# Mirrors the EmbarkStudios/cargo-deny-action invocation in
+# .github/workflows/audit.yml so local runs and CI fail on identical input.
+# Requires `cargo install --locked cargo-deny` (or the binary from
+# https://github.com/EmbarkStudios/cargo-deny/releases).
+deny-check:
+    cargo deny --manifest-path core/Cargo.toml check --config deny.toml
+
 # ── Combined ──────────────────────────────────────────────────────────────────
 
 # Run ALL tests across every layer
@@ -148,5 +156,5 @@ lint: lint-rust lint-app lint-sdk
 # Auto-fix ALL formatting
 fmt: fmt-rust fmt-app fmt-sdk
 
-# Full pre-push validation (same as CI)
-check: lint test
+# Full pre-push validation (same as CI: lint → test → cargo-deny)
+check: lint test deny-check

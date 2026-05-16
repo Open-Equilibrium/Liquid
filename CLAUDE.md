@@ -182,7 +182,7 @@ just build-all     # flutter build for all 5 platforms
 just run           # flutter run -d linux
 just cli -- --help # run the liquid CLI
 just services-up   # start Redis / Redpanda via Docker Compose (Phase 3+)
-just check         # full pre-push validation (lint + test)
+just check         # full pre-push validation (lint → test → deny-check)
 just ai-check      # validate repo-local .claude/ configuration
 ```
 

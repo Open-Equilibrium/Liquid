@@ -52,3 +52,10 @@ pre-push:
 
     cli-tests:
       run: sh -c '[ ! -d tests/cli ] || ! command -v bats >/dev/null 2>&1 || bats tests/cli/'
+
+    # cargo-deny mirror of .github/workflows/audit.yml. Skipped if
+    # `cargo-deny` is not installed locally (contributor will see the
+    # failure on CI instead). Install with:
+    #   cargo install --locked cargo-deny
+    cargo-deny:
+      run: sh -c '[ ! -f core/Cargo.toml ] || ! command -v cargo-deny >/dev/null 2>&1 || cargo deny --manifest-path core/Cargo.toml check --config deny.toml'

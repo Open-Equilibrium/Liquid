@@ -66,6 +66,7 @@ For decisions that contradict or extend an existing ADR, add a new ADR in
 | `lefthook` | latest | `npm install -g @evilmartians/lefthook` |
 | Docker | 24+ | <https://docs.docker.com/get-docker/> *(only needed for `just services-up` in Phase 3)* |
 | `bats` | latest | <https://bats-core.readthedocs.io/en/stable/installation.html> *(only needed once `tests/cli/` exists)* |
+| `cargo-deny` | latest | `cargo install --locked cargo-deny` *(needed for `just deny-check` / `just check`; lefthook's `pre-push` and CI's `audit.yml` run the same gate)* |
 
 ### First-time setup
 
@@ -81,7 +82,7 @@ cargo test --manifest-path core/Cargo.toml --workspace   # sanity-check
 just test          # all tests (Rust now; Flutter + SDK + CLI bats as they land)
 just lint          # all linters (clippy + dart analyze + dart format)
 just fmt           # auto-fix all formatting
-just check         # full pre-push validation: lint + test (matches CI)
+just check         # full pre-push validation: lint → test → deny-check (matches CI)
 just run           # flutter run -d linux  (or macos / windows)  — when M6 lands
 just cli -- --help # run the liquid CLI                          — when M7 lands
 just services-up   # start Redis / Redpanda                       — Phase 3+

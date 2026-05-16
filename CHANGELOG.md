@@ -18,6 +18,17 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Added
+
+- `just deny-check` recipe and matching pre-push lefthook step
+  wrapping `cargo deny --manifest-path core/Cargo.toml check --config
+  deny.toml`. `just check` now chains `lint → test → deny-check`, so
+  every local pre-push validation cycle catches advisory / license /
+  ban regressions that previously only fired on CI (the
+  EmbarkStudios/cargo-deny-action job in `.github/workflows/audit.yml`).
+  `cargo-deny` is now listed in `CONTRIBUTING.md`'s prerequisites
+  table; install with `cargo install --locked cargo-deny`.
+
 ### Changed
 
 - `.claude/settings.json`: tightened the `git push --force` / `git push

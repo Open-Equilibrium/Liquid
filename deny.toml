@@ -1,8 +1,13 @@
 # cargo-deny configuration for the Liquid Rust workspace.
 #
-# Run from `core/` (or via `cd core && cargo deny --config ../deny.toml check`):
+# Local invocation (matches `just deny-check` and CI):
 #
-#     cd core && cargo deny --config ../deny.toml check
+#     cargo deny --manifest-path core/Cargo.toml check --config deny.toml
+#
+# `just deny-check` wraps that command; `just check` chains it after
+# `lint` and `test` so every pre-push validation cycle catches
+# advisory/license/ban regressions before the push. The lefthook
+# `pre-push` hook runs the same recipe.
 #
 # CI runs the same command in .github/workflows/audit.yml weekly and on
 # every Cargo.lock change so a new dependency cannot smuggle in a
