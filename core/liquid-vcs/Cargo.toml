@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 liquid-core.workspace = true
+liquid-cache.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
 serde.workspace = true

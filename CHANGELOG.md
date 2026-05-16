@@ -18,6 +18,43 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Added — M4 (cache layer)
+
+- `liquid-cache::ReadCache` trait (`get` / `put` / `invalidate`,
+  all async, `Send + Sync`) and `liquid-cache::InProcessCache`
+  Phase-1 backend (`Arc<DashMap<ContentHash, Bytes>>`, no expiry).
+  Closes `IMPLEMENTATION_PLAN.md` §4.3 trait surface. 8 integration
+  tests cover put/get/overwrite/invalidate/missing-key-no-op/
+  distinct-keys/cheap-clone-shared-state/`dyn ReadCache`
+  trait-object dispatch.
+- `liquid-vcs::CachedContentStore<S, C>` — generic adapter that
+  wraps any `ContentStore` with any `ReadCache` and implements the
+  M4 wiring: read warms the cache, write invalidates the prior
+  hash, undo conservatively invalidates every cached hash for the
+  affected workspace (precise per-path invalidation deferred to
+  the jj-lib backend in TASK-004). Maintains an in-memory
+  `(WorkspaceId, StorePath) → ContentHash` index so the second
+  read of a path can find its cached bytes without touching the
+  inner store — the M4 success-criterion path. 7 wiring tests
+  cover the SpyStore-counter success criterion, write-invalidates,
+  miss-non-poisoning, content-addressable dedup across paths,
+  undo-invalidates, list/operation_log pass-through, and
+  per-workspace tenancy isolation of the path-hash index.
+  `dashmap 6.1` brings a hashbrown 0.14 / 0.17 duplicate; added a
+  `hashbrown` entry to `deny.toml`'s `bans.skip` list with the same
+  upstream-resolves-itself rationale as the existing `getrandom`
+  skip.
+- `liquid_core::ContentHash::of_bytes(&[u8])` — infallible
+  SHA-256-to-hex constructor. Centralises the SHA-256 dependency
+  in `liquid-core` (where it already had to live for ID
+  primitives) so the cache call-sites do not need their own
+  hashing logic or Absolute-Rule-1-bending `.expect()` calls. RFC
+  6234 vectors for empty input and `"abc"` plus a
+  round-trip-through-`from_hex` + collision-free test land in
+  `core/liquid-core/tests/integration.rs` (workspace test count
+  goes 26 → 30).
+- Workspace test count: **75** in M1–M4 (was 60).
+
 ### Documentation
 
 - `docs/manual-validation-m1-m3.md` (new) — Phase-1 manual

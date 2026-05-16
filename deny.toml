@@ -114,6 +114,14 @@ skip = [
     # resolves itself once argon2 ships a release on the new rand_core /
     # getrandom line. Revisit when bumping `argon2` past 0.5.x.
     { name = "getrandom" },
+    # `dashmap 6.1` (used in liquid-cache for the in-process read
+    # cache, M4) pins `hashbrown 0.14`, while `toml 0.8` (used by
+    # liquid-auth and liquid-permissions for on-disk persistence)
+    # pulls in `hashbrown 0.17` transitively via `indexmap 2.x` +
+    # `toml_edit 0.22`. The duplicate is upstream and resolves once
+    # `dashmap` ships a release on `hashbrown 0.15+`. Revisit when
+    # bumping `dashmap` past 6.x.
+    { name = "hashbrown" },
 ]
 skip-tree = []
 

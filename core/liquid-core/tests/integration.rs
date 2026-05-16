@@ -99,6 +99,47 @@ fn content_hash_rejects_non_hex_or_uppercase() {
     assert!(ContentHash::from_hex(format!("{}{}", "a".repeat(63), " ")).is_err());
 }
 
+#[test]
+fn content_hash_of_bytes_is_known_sha256_for_empty_input() {
+    // RFC 6234 vector: SHA-256("") =
+    // e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    let h = ContentHash::of_bytes(b"");
+    assert_eq!(
+        h.as_str(),
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    );
+}
+
+#[test]
+fn content_hash_of_bytes_is_known_sha256_for_abc() {
+    // RFC 6234 vector: SHA-256("abc") =
+    // ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+    let h = ContentHash::of_bytes(b"abc");
+    assert_eq!(
+        h.as_str(),
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
+}
+
+#[test]
+fn content_hash_of_bytes_round_trips_through_from_hex() {
+    // The output of `of_bytes` must always be a valid `from_hex`
+    // input — keeps the two constructors interchangeable.
+    let bytes = b"Liquid content-addressable cache test";
+    let direct = ContentHash::of_bytes(bytes);
+    let round = ContentHash::from_hex(direct.as_str()).expect("of_bytes output must validate");
+    assert_eq!(direct, round);
+}
+
+#[test]
+fn content_hash_of_bytes_is_collision_free_for_distinct_inputs() {
+    assert_ne!(
+        ContentHash::of_bytes(b"a"),
+        ContentHash::of_bytes(b"b"),
+        "distinct inputs must produce distinct hashes"
+    );
+}
+
 // ── StorePath ────────────────────────────────────────────────────────────────
 
 #[test]
