@@ -10,5 +10,5 @@ pub mod provider;
 mod storage;
 mod token;
 
-pub use local::LocalIdentityProvider;
+pub use local::{AgentSummary, LocalIdentityProvider};
 pub use provider::IdentityProvider;

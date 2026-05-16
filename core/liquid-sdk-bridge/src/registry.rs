@@ -64,6 +64,19 @@ pub trait WorkspaceRegistry: Send + Sync {
 
     /// Return every registered workspace, newest first.
     async fn list(&self) -> Result<Vec<WorkspaceSummary>>;
+
+    /// Drop the workspace with id `workspace` from the registry.
+    /// Returns `LiquidError::NotFound` if no such workspace exists.
+    /// Idempotency is the caller's responsibility — re-deleting a
+    /// gone workspace is a `NotFound` error (matches §12's
+    /// `workspace delete` UX).
+    ///
+    /// This trait method does NOT cascade-delete role bindings or
+    /// on-disk VCS content. The orphaned bindings become harmless
+    /// (`list_workspaces` is registry-driven; the workspace simply
+    /// disappears from results); the VCS bytes remain on disk for
+    /// forensics. A future M7+ flag may add cascade cleanup.
+    async fn delete(&self, workspace: WorkspaceId) -> Result<()>;
 }
 
 /// Process-local in-memory implementation. Phase-1 test / dev
@@ -112,6 +125,16 @@ impl WorkspaceRegistry for InMemoryWorkspaceRegistry {
             guard.iter().cloned().map(WorkspaceSummary::from).collect();
         out.sort_by(|a, b| b.created_unix.cmp(&a.created_unix));
         Ok(out)
+    }
+
+    async fn delete(&self, workspace: WorkspaceId) -> Result<()> {
+        let mut guard = self.lock_records();
+        let initial = guard.len();
+        guard.retain(|r| r.id != workspace);
+        if guard.len() == initial {
+            return Err(LiquidError::NotFound(format!("workspace {workspace}")));
+        }
+        Ok(())
     }
 }
 
@@ -205,6 +228,19 @@ impl WorkspaceRegistry for FilesystemWorkspaceRegistry {
             guard.iter().cloned().map(WorkspaceSummary::from).collect();
         out.sort_by(|a, b| b.created_unix.cmp(&a.created_unix));
         Ok(out)
+    }
+
+    async fn delete(&self, workspace: WorkspaceId) -> Result<()> {
+        let snapshot = {
+            let mut guard = self.lock_cache();
+            let initial = guard.len();
+            guard.retain(|r| r.id != workspace);
+            if guard.len() == initial {
+                return Err(LiquidError::NotFound(format!("workspace {workspace}")));
+            }
+            guard.clone()
+        };
+        self.flush_locked(&snapshot)
     }
 }
 
@@ -370,5 +406,46 @@ mod tests {
             path.file_name().and_then(|s| s.to_str()),
             Some("workspaces.toml")
         );
+    }
+
+    #[tokio::test]
+    async fn in_memory_delete_removes_record_and_returns_not_found_on_unknown() {
+        let r = InMemoryWorkspaceRegistry::new();
+        let first = record("alpha");
+        let target = first.id;
+        r.register(first).await.expect("insert");
+        r.delete(target).await.expect("delete");
+        let listed = r.list().await.expect("list");
+        assert!(listed.is_empty(), "registry must drop the deleted record");
+
+        // Second delete of the same id surfaces NotFound (idempotency
+        // is the caller's job per the trait doc).
+        let err = r.delete(target).await.expect_err("re-delete");
+        assert!(matches!(err, LiquidError::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn filesystem_delete_persists_removal_and_returns_not_found_on_unknown() {
+        let dir = TempDir::new().expect("tempdir");
+        let first = record("alpha");
+        let other = WorkspaceRecord {
+            id: WorkspaceId::new(),
+            name: "beta".into(),
+            created_by: PrincipalId::new_user(),
+            created_unix: 1,
+        };
+        let target = first.id;
+        {
+            let r = FilesystemWorkspaceRegistry::open(dir.path()).expect("open #1");
+            r.register(first).await.expect("insert first");
+            r.register(other.clone()).await.expect("insert other");
+            r.delete(target).await.expect("delete first");
+        }
+        let r2 = FilesystemWorkspaceRegistry::open(dir.path()).expect("open #2");
+        let listed = r2.list().await.expect("list");
+        assert_eq!(listed.len(), 1, "only the un-deleted record must survive");
+        assert_eq!(listed[0].id, other.id);
+        let err = r2.delete(target).await.expect_err("re-delete on cold open");
+        assert!(matches!(err, LiquidError::NotFound(_)));
     }
 }

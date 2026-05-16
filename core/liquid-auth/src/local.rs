@@ -126,6 +126,78 @@ impl LocalIdentityProvider {
     pub fn root(&self) -> &Path {
         &self.root
     }
+
+    /// Return every agent record whose `name` matches `query`,
+    /// across every workspace. Used by the M7 CLI's `--as <name>`
+    /// impersonation flag — the caller's bridge then checks
+    /// authority over the agent's workspace before issuing a fresh
+    /// token. The query is exact-match; substring / fuzzy is out of
+    /// scope.
+    ///
+    /// Async even though the local backend doesn't await — the trait-level
+    /// API will become async in Phase 3 (OIDC / remote user store) and
+    /// callers shouldn't have to choose between sync/async paths
+    /// (same pattern as [`Self::register_user`]).
+    #[allow(clippy::unused_async)]
+    pub async fn find_agents_by_name(&self, query: &str) -> Result<Vec<AgentSummary>> {
+        let _guard = self.state.lock().map_err(poisoned)?;
+        let agents = load_agents(&self.root)?;
+        Ok(agents
+            .into_iter()
+            .filter(|a| a.name == query)
+            .map(|a| AgentSummary {
+                principal: PrincipalId::Agent(a.id),
+                name: a.name,
+                workspace: WorkspaceId(a.workspace_id),
+                authorized_by: a.authorized_by,
+                created_unix: a.created_unix,
+            })
+            .collect())
+    }
+
+    /// Look up an agent by its `PrincipalId::Agent(_)` id and
+    /// return its [`AgentSummary`]. `NotFound` if no agent with
+    /// that id exists. Sibling to [`find_agents_by_name`]; used
+    /// by `--as <principal-id>` to resolve the workspace for the
+    /// caller's Admin check without re-parsing `agents.toml`
+    /// outside the crate.
+    ///
+    /// Async for the same Phase-3 forward-compatibility reason as
+    /// [`Self::find_agents_by_name`].
+    #[allow(clippy::unused_async)]
+    pub async fn find_agent_by_principal(&self, principal: PrincipalId) -> Result<AgentSummary> {
+        let PrincipalId::Agent(target_id) = principal else {
+            return Err(LiquidError::InvalidInput(
+                "find_agent_by_principal requires PrincipalId::Agent".into(),
+            ));
+        };
+        let _guard = self.state.lock().map_err(poisoned)?;
+        let agents = load_agents(&self.root)?;
+        agents
+            .into_iter()
+            .find(|a| a.id == target_id)
+            .map(|a| AgentSummary {
+                principal: PrincipalId::Agent(a.id),
+                name: a.name,
+                workspace: WorkspaceId(a.workspace_id),
+                authorized_by: a.authorized_by,
+                created_unix: a.created_unix,
+            })
+            .ok_or_else(|| LiquidError::NotFound(format!("agent a:{target_id}")))
+    }
+}
+
+/// Public projection of [`crate::storage::AgentRecord`] for callers
+/// that need to enumerate agents (e.g. the M7 CLI's `--as <name>`
+/// resolver). The on-disk struct stays `pub(crate)` so the serde
+/// schema is private; this struct is the stable API surface.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentSummary {
+    pub principal: PrincipalId,
+    pub name: String,
+    pub workspace: WorkspaceId,
+    pub authorized_by: String,
+    pub created_unix: u64,
 }
 
 #[async_trait]

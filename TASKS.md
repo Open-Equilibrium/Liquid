@@ -21,17 +21,18 @@ Agents: read the task carefully, check the referenced milestone in
 Jujutsu workspace via the pinned `jj-lib` version named in ADR-001. The
 trait abstraction (ADR-005) means callers won't change.
 
-### [TASK-009] Full agent CLI (M7)
+### [TASK-014] `liquid app …` subcommands (M7 follow-up, depends on M8)
 
-**Phase:** 1
-**Milestone:** M7 (IMPLEMENTATION_PLAN.md §5.8)
+**Phase:** 2
+**Milestone:** M7 (IMPLEMENTATION_PLAN.md §5.8) — `app …` subset
 **Status:** Planned
-**Blocked by:** TASK-008
+**Blocked by:** M8 — `AppManifest` + `ComponentManifest`
 
-**What.** Extend the CLI from M6.5 to cover the rest of §12: `workspace
-list/delete`, `page history`, `auth login/whoami`, `app …` subcommands,
-and the `--as` impersonation flag. Every mutation continues to run
-`require_permission!` first; every command has bats coverage.
+**What.** Implement the `app list / install / uninstall` +
+`app <instance-name> read / write / slot subscribe / slot publish`
+subcommands carved out of TASK-009. Each one needs the M8 SDK's
+`AppManifest` + (for slot subcommands) M9's `SlotBroker`. Once
+M8 ships, layer these onto the existing CLI dispatch table.
 
 ### [TASK-012] M5 Dart side — `flutter_rust_bridge` codegen + integration test
 
@@ -62,7 +63,255 @@ back → assert round-trip data + content_hash matches).
 
 ---
 
+### [TASK-016b] M9 wiring UI on `PageGrid`
+
+**Phase:** 2
+**Milestone:** M9 — wiring UI half (`IMPLEMENTATION_PLAN.md §6.2`)
+**Status:** Planned
+**Blocked by:** M6 page tooling + TASK-012 (Dart bridge)
+
+**What.** Add the long-press-on-output-slot → drag → drop-on-input
+gesture to `PageGrid` that calls `bridge.wireSlots(...)` (TASK-012)
+which translates to `liquid-bindings::InProcessSlotBroker::wire`
+(TASK-016a, Done). Persists the resulting `BindingsDocument` to
+`.liquid/pages/<page_id>/bindings.json` so wiring survives a page
+reload.
+
+### [TASK-011a] AES-256-GCM encryption helper crate
+
+**Phase:** 2
+**Milestone:** M5 follow-up / M10 prerequisite
+(`IMPLEMENTATION_PLAN.md §6.3` — declared on TASK-017's
+`Blocked by` line so M10 cannot start without it).
+**Status:** Planned
+**Blocked by:** None (small leaf utility).
+
+**What.** Small helper crate (likely `liquid-crypto`) that
+exposes:
+
+- `derive_key(password: &str, salt: &[u8; 16]) -> [u8; 32]` —
+  Argon2id with the project-pinned parameters
+  (`memory = 64 MiB`, `iterations = 3`, `parallelism = 1`,
+  matching `liquid-auth`'s password hash so callers can reuse
+  the existing parameter constants).
+- `encrypt(plaintext: &[u8], key: &[u8; 32]) -> Vec<u8>` —
+  AES-256-GCM with a per-message random nonce; output is
+  `nonce || ciphertext || tag` (12 + N + 16 bytes).
+- `decrypt(envelope: &[u8], key: &[u8; 32]) -> Result<Vec<u8>>`
+  — inverse of `encrypt`; returns `InvalidInput` on every
+  failure mode (wrong key, truncated envelope, tampered tag)
+  so the caller cannot tell which mode failed (matches §4.5's
+  anti-enumeration posture).
+
+**Acceptance criteria.**
+- [ ] `cargo test -p liquid-crypto` round-trips plaintext via
+      `encrypt` → `decrypt` (happy path).
+- [ ] `cargo test -p liquid-crypto` returns `InvalidInput` for
+      wrong-key, truncated-envelope, and tampered-tag cases
+      (single error variant — no failure-mode leak).
+- [ ] No `unwrap()` / `expect()` outside `#[cfg(test)]`.
+- [ ] `cargo deny check` clean (matches workspace policy).
+- [ ] `IMPLEMENTATION_PLAN.md §4` gains a `4.x` subsection
+      documenting the three-function surface.
+
+### [TASK-017] M10 multi-instance tenant configuration
+
+**Phase:** 2
+**Milestone:** M10 (`IMPLEMENTATION_PLAN.md §6.3`)
+**Status:** Planned
+**Blocked by:** TASK-012 (M5 Dart side), TASK-011a (encryption helper)
+
+**What.** AES-256-GCM-encrypted per-instance tenant config under
+`.liquid/instances/<instance_id>/tenant.enc.json`; key derived
+from the workspace owner's password via Argon2id (never stored
+on disk). UI form generated from the app's
+`TenantConfigSchema.jsonSchema` (already declared in the M8 SDK).
+
+### [TASK-020] Align `SlotBroker` trait with `IMPLEMENTATION_PLAN.md §4.4`
+
+**Phase:** 4 (distributed backend)
+**Milestone:** M18 (`IMPLEMENTATION_PLAN.md §8` — distributed event bus)
+**Status:** Planned
+**Blocked by:** None for the trait change; the actual distributed
+implementation depends on Phase-4 networking primitives.
+
+**What.** The shipped `SlotBroker` trait in `core/liquid-bindings/`
+omits the `workspace: WorkspaceId`, `instance: AppInstanceId`,
+`subscriber: PrincipalId`, and `wired_by: PrincipalId` parameters
+that §4.4 specifies, returns `LiquidError` (not a dedicated
+`BrokerError`), and uses a tokio `broadcast::Receiver` (not a
+`BoxStream`). The flat `SlotName` keyspace is safe for the
+single-process Phase-2 backend because the CLI drives exactly one
+workspace at a time and apps namespace their slot names. It is
+**not** safe for the distributed event bus that ships in Phase-4,
+which has to route traffic across workspaces + agent processes and
+authorise every subscribe + wire against a principal.
+
+**Acceptance:**
+- Trait surface in `core/liquid-bindings/src/broker.rs` matches
+  the §4.4 target signatures exactly.
+- `InProcessSlotBroker` keys its `HashMap` by
+  `(WorkspaceId, AppInstanceId, SlotName)`.
+- Every public method calls `require_permission!(perms, principal,
+  Action::Write, Resource::AppInstance(instance))` (or the
+  appropriate analog for subscribe / wire) before touching state —
+  satisfies Absolute Rule 4.
+- Every storage call takes a `WorkspaceId` — satisfies
+  Absolute Rule 5.
+- Existing 12 broker tests get the new parameters threaded through;
+  add cross-workspace isolation tests asserting that a publish on
+  `(ws_a, instance, slot)` does **not** reach a subscriber on
+  `(ws_b, instance, slot)`.
+- Update the §4.4 "Phase-2 deviation" note to remove the deviation
+  callout once the trait surfaces match.
+
+### [TASK-019] Implement `sdk/liquid_sdk_lint` custom-lint package
+
+**Phase:** 2
+**Milestone:** M8 follow-up (`IMPLEMENTATION_PLAN.md §6.1`)
+**Status:** Planned
+**Blocked by:** None (depends only on the existing `sdk/liquid_sdk/`).
+
+**What.** CLAUDE.md Absolute Rules 2 and 3 currently lean on two
+custom Dart lints (`no_platform_imports`, `no_cross_component_reference`)
+that are documented but not implemented. Implement them as a sibling
+package `sdk/liquid_sdk_lint/` exporting both rules via
+`custom_lint_builder`, wire them into `analysis_options.yaml` for
+`app/`, `sdk/liquid_sdk/`, and every `apps/*/` package, and add a
+CI step that runs `dart run custom_lint`. Until this task lands, the
+two rules are advisory-by-convention only.
+
+### [TASK-018] Re-enable multi-platform Flutter CI matrix
+
+**Phase:** 4 (mobile + cross-platform polish)
+**Milestone:** Pre-1.0 obligations checklist (`IMPLEMENTATION_PLAN.md §17`)
+**Status:** Planned
+**Blocked by:** Multi-platform scaffolding under `app/{android,ios,macos,windows}/`
+
+**What.** M6 only requires the Flutter shell to launch on Linux
+(`IMPLEMENTATION_PLAN.md §5.7`), so this branch's CI matrix in
+`.github/workflows/ci.yml` ships with `target: linux` only.
+When the project actually generates `flutter create --platforms=…`
+scaffolding for Android, iOS, macOS, and Windows, restore the four
+extra matrix entries (Android needs `android-actions/setup-android`,
+iOS needs `--no-codesign`) and the per-platform `flutter build`
+arms. Keep `dart format`, `flutter analyze`, and `flutter test`
+linux-only so we don't pay 5× for tests that don't change per
+platform.
+
 ## Done tasks
+
+### [TASK-016a] M9 Rust side — `SlotBroker` + `InProcessSlotBroker`
+
+**Phase:** 2
+**Milestone:** M9 — Rust half (`IMPLEMENTATION_PLAN.md §6.2`)
+**Status:** Done
+
+**What.** Shipped the `liquid-bindings::SlotBroker` trait + the
+`InProcessSlotBroker` Phase-2 backend (per-slot
+`tokio::sync::broadcast` channels, in-memory wiring table,
+JSON-serialisable `BindingsDocument` for page-reload replay).
+Plus `SharedBroker` type alias (`Arc<dyn SlotBroker>`) ready for
+the bridge to share across FFI workers.
+
+**Acceptance criteria.**
+- [x] `cargo test -p liquid-bindings` is green (12 inline tests —
+      the original 9 plus 2-hop + 3-hop `wire` cycle rejection and
+      multi-hop `load_bindings` cycle rejection added in the PR #18
+      audit response).
+- [x] `cargo clippy --workspace --all-targets --locked -- -D
+      warnings` clean.
+- [x] No `unwrap()` / `expect()` outside `#[cfg(test)]`.
+- [x] `IMPLEMENTATION_PLAN.md §4.4` + §6.2 ticked for the Rust
+      half; Dart side cross-referenced to TASK-012 + TASK-016b.
+
+### [TASK-015] M8 Public Dart SDK API surface
+
+**Phase:** 2
+**Milestone:** M8 (`IMPLEMENTATION_PLAN.md §6.1`)
+**Status:** Done
+
+**What.** Scaffolded `sdk/liquid_sdk/` (`flutter create --template=package`)
+and shipped the M8 API surface: `LiquidComponent`,
+`InputSlot`/`OutputSlot`/`SlotSchema`, sealed
+`SlotValue` with `when` matcher, `AppManifest`,
+`ComponentManifest`, `Permission`, `TenantConfigSchema`,
+`CliCommandDeclaration`, plus abstract `GridApi`/`VcsApi`/
+`PermissionApi`/`SlotEmitter`/`SlotConsumer` runtime APIs. The
+concrete `flutter_rust_bridge`-backed runtime impls ship with
+TASK-012; the M8 SDK's job is the *typed surface developers
+extend*.
+
+**Acceptance criteria.**
+- [x] `flutter test` is green (8 / 8 cases — the M8 plan-level
+      success criterion via a `_ResetCounter` stub component plus
+      `SlotValue.json` / `SlotValue.bytes` structural-equality
+      regressions added in the PR #18 audit response).
+- [x] `flutter analyze` clean.
+- [x] `IMPLEMENTATION_PLAN.md §6.1` ticks every checkbox + the
+      ones marked "abstract surface; concrete impl pending
+      TASK-012".
+
+### [TASK-013] M6 Flutter shell skeleton
+
+**Phase:** 1 / 2 (transition)
+**Milestone:** M6 (`IMPLEMENTATION_PLAN.md §5.7`)
+**Status:** Done
+
+**What.** Scaffolded `app/` (`flutter create --platforms=linux`)
+and shipped the four canonical widgets: `RootShell` (resizable
+`Row` of `ExplorerPanel` + `PageArea`), `ExplorerPanel`
+(workspace switcher dropdown + placeholder section list),
+`PageArea` (toolbar + `PageGrid`), `PageGrid` (12×12 grid,
+drag-to-reposition, bottom-right resize handle, snap-to-grid).
+Riverpod hosts every state container. One placeholder `GridItem`
+seeds the grid so it's exercisable on first launch.
+
+**Acceptance criteria.**
+- [x] `flutter test` is green (4 / 4 widget tests covering the
+      M6 success criterion: RootShell mounts the four widgets;
+      workspace switcher lists demo workspaces; PageGrid hosts
+      the placeholder; toolbar wires the documented affordances).
+- [x] `flutter analyze` clean.
+- [x] No `dart:io`, no platform plugins — Absolute Rule 2.
+- [x] `IMPLEMENTATION_PLAN.md §5.7` ticks shipped checkboxes;
+      the deeper `PageTreeView` / `AppInstanceListView` /
+      `TagSectionView` items stay open as placeholder section
+      headers (await M8 data sources).
+
+### [TASK-009] Full agent CLI (M7)
+
+**Phase:** 1
+**Milestone:** M7 (IMPLEMENTATION_PLAN.md §5.8)
+**Status:** Done — `app …` subset carved out to TASK-014 (Planned).
+
+**What.** Shipped the remainder of the §12 CLI surface on top of
+M6.5: `workspace list`, `workspace delete`, `page history`,
+`auth login`, `auth whoami`, and the global `--as` impersonation
+flag (accepts both bare-name lookup and principal-form ids).
+Plus `BridgeServices::delete_workspace` (gated by
+`Action::Admin`) + `WorkspaceRegistry::delete` (`InMemory` +
+`Filesystem` variants) + `LocalIdentityProvider::find_agents_by_name`
++ `find_agent_by_principal` (drives the `--as` lookup).
+
+**Acceptance criteria.**
+- [x] `bats tests/cli/11_m7_full_cli.bats` is green (16 / 16 —
+      workspace list / delete, page history (incl. `--limit > matches`),
+      auth login / whoami (incl. duplicate `--register`), `--as`
+      impersonation happy + unknown + ambiguous-name paths).
+- [x] Every mutating subcommand runs `require_permission!` first
+      (directly or via the bridge's
+      `delete_workspace` / `create_workspace` arms).
+- [x] No `unwrap()` / `expect()` outside `#[cfg(test)]`.
+- [x] `IMPLEMENTATION_PLAN.md §5.8` ticks every shipped checkbox;
+      the `app …` rows are left unticked with a pointer to
+      TASK-014.
+- [x] `cargo clippy --workspace --all-targets --locked -- -D
+      warnings` clean; `cargo fmt --all --check` clean.
+- [x] Workspace delete is anti-enumeration: the permission check
+      fires before the registry lookup so unknown workspaces
+      surface as `Forbidden` rather than `NotFound` (§4.5).
+
 
 ### [TASK-008] Minimal agent CLI (M6.5)
 
@@ -90,7 +339,7 @@ emit maps `OperationKind::{Create,Update}` to the user-visible
       after dropping every `skip "pending M6.5"`.
 - [x] Every subcommand has a focused bats test covering the happy
       path and at least one auth-failure / negative path
-      (`tests/cli/10_cli_subcommands.bats`, 13 cases).
+      (`tests/cli/10_cli_subcommands.bats`, 16 cases).
 - [x] No `unwrap()` / `expect()` outside `#[cfg(test)]`.
 - [x] `IMPLEMENTATION_PLAN.md §12` grammar matches every shipped
       subcommand; §5.6 ticks every checkbox; §9 `liquid-cli`

@@ -437,7 +437,11 @@ dependencies = [
 name = "liquid-bindings"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "liquid-core",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

@@ -76,11 +76,13 @@ for m in "${readme_done[@]:-}"; do
   m_esc=$(escape_ere "$m")
   m_num_esc=$(escape_ere "${m#M}")
   # Accept either the legacy form "### 5.N Milestone N —" or the
-  # versioned form "### 5.N Milestone M6.5 —".
-  if grep -Eq "^### 5\.[0-9]+ Milestone ($m_esc|$m_num_esc) " IMPLEMENTATION_PLAN.md; then
+  # versioned form "### 5.N Milestone M6.5 —". Phase-2 milestones
+  # (M8 / M9 / M10 / …) live under §6 rather than §5, so accept either
+  # section prefix.
+  if grep -Eq "^### [56]\.[0-9]+ Milestone ($m_esc|$m_num_esc) " IMPLEMENTATION_PLAN.md; then
     : # ok
   else
-    bad "$m marked ✅ Done in README.md but IMPLEMENTATION_PLAN.md §5 has no matching heading"
+    bad "$m marked ✅ Done in README.md but IMPLEMENTATION_PLAN.md §5/§6 has no matching heading"
   fi
 done
 

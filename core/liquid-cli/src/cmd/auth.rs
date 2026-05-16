@@ -83,6 +83,50 @@ pub fn token(home: &Path) -> Result<Envelope> {
     Ok(Envelope::ok_data(json!({ "token": t.clone() })).with_text(t))
 }
 
+/// `liquid auth login --username <u> --password <p> [--register]`
+/// — non-interactive auth. With `--register` first creates the
+/// user (rejects if the username is taken); without it,
+/// authenticates an existing user. On success writes the token to
+/// `$LIQUID_HOME/token` so subsequent commands pick it up.
+pub async fn login(
+    services: &CliServices,
+    home: &Path,
+    username: &str,
+    password: &str,
+    register: bool,
+) -> Result<Envelope> {
+    if register {
+        // `register_user` returns `InvalidInput` on duplicate
+        // username; surface that directly to the caller.
+        services.identity.register_user(username, password).await?;
+    }
+    let issued = services
+        .identity
+        .authenticate_user(username, password)
+        .await?;
+    token::write(home, &issued)?;
+    Ok(Envelope::ok_data(json!({ "token": issued.clone() })).with_text(issued))
+}
+
+/// `liquid auth whoami` — validate the active token and report
+/// the principal it resolves to. Useful for shell scripts that
+/// need to assert their own identity before mutating state.
+pub async fn whoami(services: &CliServices, home: &Path) -> Result<Envelope> {
+    let token_str = token::require(home)?;
+    let principal = services.identity.validate_token(&token_str).await?;
+    let kind = match principal {
+        liquid_core::PrincipalId::User(_) => "user",
+        liquid_core::PrincipalId::Agent(_) => "agent",
+    };
+    let principal_str = principal.to_string();
+    let summary = principal_str.clone();
+    Ok(Envelope::ok_data(json!({
+        "principal": principal_str,
+        "kind": kind,
+    }))
+    .with_text(summary))
+}
+
 fn parse_role(s: &str) -> Result<BuiltInRole> {
     match s {
         "WorkspaceOwner" => Ok(BuiltInRole::WorkspaceOwner),

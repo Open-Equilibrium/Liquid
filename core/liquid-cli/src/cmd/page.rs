@@ -100,6 +100,72 @@ pub async fn read(
     Ok(Envelope::ok_data(value))
 }
 
+/// `liquid page history <path> --workspace <id>` — operation-log
+/// entries that touched `<path>`, newest-first, NDJSON when
+/// `--format json`. Same shape as `audit list` records but
+/// filtered to one path (M7 / §5.8).
+pub async fn history(
+    services: &CliServices,
+    home: &Path,
+    user_path: &str,
+    workspace: &str,
+    limit: usize,
+) -> Result<Envelope> {
+    let caller_token = token::require(home)?;
+    let principal = services.identity.validate_token(&caller_token).await?;
+    let workspace = parse::workspace_id(workspace)?;
+    let page_id = page_id_for(workspace, user_path);
+    let perms = services.permissions.as_ref();
+    require_permission!(perms, principal, Action::Read, Resource::Page(page_id));
+
+    let store_path = parse_store_path(user_path)?;
+    // Fetch the entire op log and apply the `path` filter + `limit`
+    // in-CLI. `operation_log`'s `limit` is a *prefix* cap, not a
+    // per-path cap — feeding it `limit` directly would silently
+    // under-return matches for a path that lives further back in
+    // the log than `limit` entries. Phase 1 keeps this O(N) per
+    // call; a per-path cursor lands with the Phase-4 paged log API.
+    let log = services.store.operation_log(workspace, usize::MAX).await?;
+    let mut records: Vec<serde_json::Value> = Vec::new();
+    for op in log {
+        let matches_path = match &op.kind {
+            liquid_vcs::OperationKind::Create { path, .. }
+            | liquid_vcs::OperationKind::Update { path, .. }
+            | liquid_vcs::OperationKind::Delete { path, .. } => {
+                path.as_str() == store_path.as_str()
+            }
+            liquid_vcs::OperationKind::Undo { .. } => false,
+        };
+        if !matches_path {
+            continue;
+        }
+        let action = match &op.kind {
+            liquid_vcs::OperationKind::Create { .. } | liquid_vcs::OperationKind::Update { .. } => {
+                "Write"
+            }
+            liquid_vcs::OperationKind::Delete { .. } => "Delete",
+            liquid_vcs::OperationKind::Undo { .. } => "Undo",
+        };
+        let principal_str = match op.author {
+            liquid_core::PrincipalId::User(u) => format!("u:{u}"),
+            liquid_core::PrincipalId::Agent(a) => format!("a:{a}"),
+        };
+        records.push(serde_json::json!({
+            "operation_id": op.id.to_string(),
+            "commit_id": op.commit.to_string(),
+            "timestamp_unix_millis": op.timestamp_unix_millis,
+            "principal": principal_str,
+            "action": action,
+            "path": user_path,
+            "message": op.message,
+        }));
+        if records.len() >= limit {
+            break;
+        }
+    }
+    Ok(Envelope::ok_records(records))
+}
+
 pub async fn undo(
     services: &CliServices,
     home: &Path,

@@ -18,6 +18,305 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Added — M6 Flutter shell skeleton (TASK-013)
+
+- `app/` scaffold (`flutter create --platforms=linux --org
+  io.openequilibrium --project-name liquid_app`). Depends on
+  `flutter_riverpod ^2.5.0` and the in-repo
+  `path: ../sdk/liquid_sdk` package.
+- Four canonical widgets per `IMPLEMENTATION_PLAN.md §5.7`:
+  - `RootShell` (`Row` of resizable `ExplorerPanel` + `PageArea`;
+    drag handle between them clamped to 200–480 px).
+  - `ExplorerPanel` (workspace switcher dropdown driven by
+    `workspacesProvider` + section headers for Pages / Apps /
+    Tags — real children land with M8 data sources).
+  - `PageArea` (toolbar with active-workspace title + `add`
+    button + pending `save` / `history`).
+  - `PageGrid` (12×12 grid, `Stack`+`Positioned` layout,
+    drag-to-reposition + bottom-right resize handle, snap-to-grid
+    integer rounding). One placeholder `GridItem` seeded by
+    `gridItemsProvider` so the grid is exercisable on first
+    launch (M6 success criterion).
+- `app/test/widget_test.dart` (4 cases) — shell mounts the four
+  widgets; switcher lists demo workspaces; PageGrid hosts the
+  placeholder; toolbar wires the documented affordances.
+
+### Added — M8 Public Dart SDK API surface (TASK-015)
+
+- `sdk/liquid_sdk/` scaffold (`flutter create --template=package`).
+- Typed component-author API:
+  - `LiquidComponent` abstract base (extends `StatefulWidget`)
+    with `inputs` / `outputs` / `gridConstraints` getters.
+  - `InputSlot` / `OutputSlot` typed slot handles +
+    `InputSlotMap` / `OutputSlotMap` aliases.
+  - `SlotSchema` + `SlotKind` enum + sealed `SlotValue` with
+    `when` matcher (mirrors `liquid_core::SlotValue`).
+- Declarative manifest types: `AppManifest`,
+  `ComponentManifest`, `Permission`, `TenantConfigSchema`,
+  `CliCommandDeclaration`, `ManifestAction`.
+- Abstract runtime APIs (concrete impls land with TASK-012):
+  `GridApi`, `VcsApi` (+ `HistoryEntry`), `PermissionApi`,
+  `SlotEmitter`, `SlotConsumer`.
+- `sdk/liquid_sdk/test/liquid_sdk_test.dart` (8 cases) — the M8
+  success criterion (`_ResetCounter` stub component declares one
+  input + one output) + `SlotValue` matcher routing + `SlotValue.json`
+  and `SlotValue.bytes` structural-equality regressions +
+  `AppManifest` round-trip.
+
+### Added — M9 Rust-side data binding broker (TASK-016a)
+
+- `liquid_bindings::SlotBroker` trait + `InProcessSlotBroker`
+  Phase-2 backend. Per-slot `tokio::sync::broadcast` channels
+  (`SLOT_BUFFER_SIZE = 256`), in-memory wiring table, fan-out
+  on publish to wired downstreams.
+- `SlotWiring { from, to }` + `BindingsDocument { wires }` —
+  JSON-serialisable shapes the SDK persists to
+  `.liquid/pages/<page_id>/bindings.json` so wiring survives
+  page reload. `save_bindings` / `load_bindings` is the
+  round-trip.
+- `SharedBroker = Arc<dyn SlotBroker>` type alias for the
+  bridge to share across FFI workers.
+- 12 inline tests in `core/liquid-bindings/src/broker.rs` —
+  publish-no-subscribers / publish-then-receive (one + two
+  subscribers) / wire fans out / self-wire rejection / wire is
+  idempotent / 2-hop cycle rejection via `wire` / 3-hop cycle
+  rejection via `wire` / save→load round-trip survives a fresh
+  broker (proves wiring replay works on page reload) / load
+  rejects self-wires / load rejects multi-hop cycles /
+  `BindingsDocument` JSON round-trip.
+
+Carved out for follow-ups (each tracked in `TASKS.md`):
+TASK-016b (wiring UI on `PageGrid`, blocked on M6 page tooling
++ TASK-012), TASK-012 (M5 Dart side — FFI codegen + `bridge.
+publishSlot` / `subscribeSlot`), TASK-017 (M10 multi-instance
+tenant config with AES-256-GCM-encrypted persistence + UI form
+generation, blocked on TASK-012).
+
+### Added — M7 full agent CLI (TASK-009)
+
+- `liquid workspace list` — NDJSON, newest first, filtered to
+  workspaces the caller has Read on (per-row
+  `PermissionIndex::check`).
+- `liquid workspace delete <id>` — Admin-gated via the new
+  `BridgeServices::delete_workspace` + `WorkspaceRegistry::delete`.
+  Anti-enumeration: the permission check fires before the
+  registry lookup so unknown workspaces surface as `Forbidden`
+  rather than `NotFound` (§4.5). Does NOT cascade-delete on-disk
+  VCS bytes (forensics) — same Phase-1 boundary as the M6.5
+  `workspace create` bootstrap.
+- `liquid page history <path> --workspace <id> [--limit N]` —
+  per-path operation-log view, newest-first NDJSON. Same record
+  shape as `audit list` but filtered to one `StorePath`. Flattens
+  `OperationKind::{Create,Update}` to `"Write"` (same flattening
+  rule as `audit list` so the user-visible verb is consistent).
+- `liquid auth login --username <u> --password <p> [--register]`
+  — non-interactive login. `--register` first creates the user
+  (rejects on dup); without it, `IdentityProvider::authenticate_user`
+  validates the Argon2id hash. On success writes the issued
+  token to `$LIQUID_HOME/token`. The fully interactive password
+  prompt is a planned follow-up; the scriptable shape is what
+  the bats suite needs.
+- `liquid auth whoami` — validates the active token, prints
+  `{ principal, kind }` where `kind` is `"user"` / `"agent"`.
+  Useful in shell scripts that need to assert identity before
+  mutating state.
+- Global `--as <name|principal-id>` impersonation flag.
+  Principal-form (`a:<uuid>` / `agent:<uuid>`) parses via
+  `PrincipalId::FromStr` and resolves the agent's workspace via
+  the new `LocalIdentityProvider::find_agent_by_principal`.
+  Bare-name lookups go through `find_agents_by_name`; exactly-one
+  match is required (zero → `NotFound`; multiple →
+  `InvalidInput`). The caller must hold `Action::Admin` on the
+  target's workspace OR be the target themselves;
+  `User`-principal impersonation is rejected in Phase 1.
+- `liquid_auth::AgentSummary` — public projection of the
+  pub(crate)-only `AgentRecord` so external callers (CLI's
+  `--as` resolver) can enumerate agents without re-parsing
+  `agents.toml`.
+- `WorkspaceRegistry::delete` trait method + `InMemory` and
+  `Filesystem` impls. `Filesystem` round-trips through
+  `flush_locked` so the on-disk `workspaces.toml` reflects the
+  removal atomically.
+- `tests/cli/11_m7_full_cli.bats` (new, 16 cases) covers every
+  shipped subcommand's happy path + at least one negative path
+  (Forbidden / NotFound / InvalidInput as appropriate). Three of
+  the 16 are PR #18 audit-pass regressions for
+  `auth login --register` username collisions, ambiguous `--as`
+  name disambiguation, and `page history --limit > matches`.
+
+**Carved out:** `liquid app list / install / uninstall` +
+`liquid app <instance-name> read / write / slot subscribe / slot
+publish` deferred to TASK-014 (planned, blocked on M8 —
+`AppManifest`). The §5.8 spec checkboxes for those rows stay
+unticked with an inline pointer.
+
+### Fixed — Post-M6-M9 audit (PR #18 review pass, round 7)
+
+- `TASKS.md`: added the missing **TASK-011a** heading
+  (`AES-256-GCM encryption helper crate`). The entry was referenced
+  on TASK-017's `Blocked by:` line for several rounds but had no
+  definition — a contributor picking up M10 could not discover what
+  TASK-011a required them to build first. The new entry specifies
+  the three-function surface (`derive_key` / `encrypt` / `decrypt`),
+  the Argon2id parameter pinning, the anti-enumeration single-error
+  return shape, and the per-crate test gates.
+- `core/liquid-bindings/src/broker.rs`,
+  `IMPLEMENTATION_PLAN.md §4.4`, and the matching round-3 CHANGELOG
+  bullet: corrected the actor that justifies the Phase-2 flat
+  `SlotName` keyspace. The previous text said "the CLI drives
+  exactly one workspace at a time" but the agent CLI never
+  instantiates `InProcessSlotBroker`; the broker is hosted inside
+  the Flutter app process. Rewording avoids confusing a future
+  Absolute-Rule-5 audit into searching the CLI for a missing
+  workspace scope that was never there.
+
+### Fixed — Post-M6-M9 audit (PR #18 review pass, round 6)
+
+- `docs/manual-validation-m6-m9.md` Step M8.1 expected `6 / 6` →
+  `8 / 8` (covers the two structural-equality regressions); Step
+  M9.1 expected `9 / 9` → `12 / 12` with the three cycle-rejection
+  test names appended; the §M9 intro `9 inline tests` → `12 inline
+  tests`. These were the only doc-staleness pockets the prior
+  rounds' propagation sweep missed.
+- `sdk/liquid_sdk/lib/src/runtime_apis.dart` doc comments: stale
+  bare task-id references replaced with `TASK-016b` (the Dart-side
+  slot emitter / consumer wiring belongs to that task, alongside
+  TASK-012 for the bridge codegen).
+
+### Fixed — Post-M6-M9 audit (PR #18 review pass, round 5)
+
+- Bats-test count corrections that round 4 missed:
+  `tests/cli/11_m7_full_cli.bats` is now `16 / 16` everywhere
+  it appears (was `13 / 13` in `CHANGELOG.md`, `TASKS.md`,
+  `IMPLEMENTATION_PLAN.md §5.8`, and the M6-M9 manual-validation
+  guide); `tests/cli/10_cli_subcommands.bats` is now `16 cases`
+  in `TASKS.md` (was `13 cases`, while
+  `IMPLEMENTATION_PLAN.md §5.6` already had the correct count).
+  The cross-suite total in `docs/manual-validation-m6-m9.md`
+  sign-off checklist is `120 / 120` (was `117 / 117`).
+- `IMPLEMENTATION_PLAN.md §6.2` success-criterion enumeration:
+  appended the two `SlotBroker` test scenarios the slash-separated
+  list was missing (`two-subscribers fan-out`,
+  `BindingsDocument JSON round-trip`) so the enumeration matches
+  the `12 inline` count.
+- `core/liquid-sdk-bridge/Cargo.toml`: annotated the forward-
+  declared `liquid-bindings` workspace dependency with a comment
+  explaining it is the placeholder for TASK-012's
+  `publish_slot` / `subscribe_slot` / `wire_slots` /
+  `load_bindings` FFI entry points, so a future maintainer
+  cannot mistake it for an unused dep ready to be culled.
+
+### Fixed — Post-M6-M9 audit (PR #18 review pass, round 4)
+
+- `README.md` Status table M8 / M9 rows: test counts corrected
+  from `6 tests` → `8 tests` (M8) and `9 tests` → `12 tests`
+  (M9, with the cycle-rejection note appended).
+- `CHANGELOG.md` `Added — M8` / `Added — M9` bullets: same count
+  + scenario corrections so the original feature description
+  matches the shipped state of the test suites.
+- `TASKS.md` Done-section criteria for TASK-015 / TASK-016a:
+  same count corrections.
+- `app/lib/src/page_area.dart` + `app/test/widget_test.dart`:
+  toolbar tooltips and the matching widget-test reason replaced
+  the stale `(pending M8)` text with the accurate
+  `(pending TASK-012 VcsApi wiring)` blocker — M8 (typed surface)
+  has shipped; only the concrete FFI-backed runtime APIs are
+  still pending TASK-012.
+
+### Fixed — Post-M6-M9 audit (PR #18 review pass, round 3)
+
+- `IMPLEMENTATION_PLAN.md §6.1` success-criterion count corrected
+  from "6 / 6" to "8 / 8" (two structural-equality regressions
+  landed in round 1).
+- `IMPLEMENTATION_PLAN.md §6.2` success-criterion count corrected
+  from "9 inline" to "12 inline" and the enumeration now lists every
+  cycle / self-wire / load-rejects case so the table matches the
+  CHANGELOG bullet that already says "Three dedicated cycle tests".
+- `IMPLEMENTATION_PLAN.md §4.4` now leads with a "Phase-2 deviation"
+  callout: the shipped `SlotBroker` trait in
+  `core/liquid-bindings/src/broker.rs` deliberately omits the
+  `workspace: WorkspaceId`, `instance: AppInstanceId`, and
+  `subscriber: PrincipalId` arms the target spec lists. The flat
+  `SlotName` keyspace is safe for the single-process Phase-2 backend
+  (the broker runs inside the Flutter app process — the agent CLI
+  never instantiates it — and the app holds exactly one workspace
+  open at a time, with apps already namespacing their slots); the
+  workspace+instance+principal-aware shape lands
+  with the Phase-4 distributed backend under **TASK-020** so the
+  cross-tenant isolation contract is enforced in one place. The
+  broker module docstring + a new TASK-020 entry in `TASKS.md`
+  mirror the deviation note.
+- `sdk/liquid_sdk/test/liquid_sdk_test.dart`: narrowed the
+  `prefer_const_constructors` lint suppression from a file-wide
+  `ignore_for_file` to per-line `// ignore:` on the three runtime-
+  constructed `SlotValue.json` / `SlotValue.bytes` literals that
+  must stay non-const for the structural-equality tests to mean
+  anything. Inner `<int>[...]` literals stay `const` because they
+  do not promote the enclosing map to a const value.
+
+### Fixed — PR #18 CI green-lighting (sync-docs + dart-format + scaffolded-platform matrix)
+
+- `scripts/sync-docs-check.sh`: extended the milestone-evidence
+  grep to accept Phase-2 `### 6.N Milestone` headings in addition
+  to the Phase-1 `### 5.N` form. The previous gate only looked in
+  §5 and falsely flagged M8 + M9 as undocumented even though
+  `IMPLEMENTATION_PLAN.md §6` covers them.
+- `sdk/liquid_sdk/lib/src/runtime_apis.dart`,
+  `app/lib/src/page_area.dart`, `app/lib/src/page_grid.dart`,
+  `app/test/widget_test.dart`: applied `dart format` so the
+  `--set-exit-if-changed` step on both CI jobs passes. Pure
+  whitespace shifts; no behaviour change.
+- `.github/workflows/ci.yml`: shrunk the `Flutter app` matrix to
+  `linux` — M6's success criterion is "App launches on Linux"
+  (`IMPLEMENTATION_PLAN.md §5.7`) and this branch ships no
+  scaffolding under `app/{android,ios,macos,windows}`. TASK-018
+  tracks the multi-platform re-expansion when the missing
+  scaffolding lands.
+
+### Fixed — Post-M6-M9 audit (PR #18 review pass)
+
+- `sdk/liquid_sdk/lib/src/slot.dart`: `SlotValue.json` equality is
+  now structural (`DeepCollectionEquality` from `package:collection`)
+  instead of identity-based. The bug meant two `SlotValue.json` values
+  with deep-equal `Map` / `List` contents compared unequal, which
+  would have silently broken any caller using them as map keys, in
+  `Set` membership, or in equality-based cache lookups. Test coverage
+  added for both `json` and `bytes` structural equality, using
+  runtime (`final`) literals + `identical(a, b) == false` guard so
+  Dart's const canonicalisation cannot mask a regression of the bug.
+- `core/liquid-bindings/src/broker.rs`: `Mutex` poison now propagates
+  via `LiquidError::InvalidInput` (matches `liquid-auth`,
+  `liquid-permissions`, and `liquid-vcs`) instead of silently
+  continuing with poisoned state. Added multi-hop cycle detection to
+  `wire` + `load_bindings`: A→B + B→A, A→B→C→A, and equivalent
+  multi-hop topologies now return `InvalidInput`, so the upcoming
+  wiring UI cannot persist a graph that closes a cycle. Three
+  dedicated cycle tests (2-hop wire, 3-hop wire, multi-hop document).
+- `core/liquid-cli/src/cmd/page.rs`: `page history --limit N` is now
+  a per-path cap (N matching writes) rather than a prefix cap on the
+  op log. The previous behaviour silently under-returned matches when
+  unrelated writes dominated the recent log; the spec entry in
+  `IMPLEMENTATION_PLAN.md §12` documents the per-path cap semantics
+  and the Phase-1 O(N) cost. Regression test added.
+- `tests/cli/11_m7_full_cli.bats`: three new regressions — duplicate
+  `auth login --register` rejects with `InvalidInput`; ambiguous
+  `--as <name>` rejects with `InvalidInput` and points at the
+  principal-form for disambiguation; `page history` with a `--limit`
+  larger than the number of matching writes returns only the
+  matching writes (no false-positive entries from sibling paths).
+- `app/lib/src/state.dart`: the doc comment claiming a typedef-only
+  swap from `StateProvider` to `AsyncNotifierProvider` was misleading
+  (consumer widgets would also change). Comment now describes the
+  real (small) widget-side change that TASK-012 will require.
+- `app/lib/src/page_grid.dart`: replaced deprecated `Color.withOpacity`
+  with `withAlpha`, preventing an analyzer warning once the Flutter
+  SDK rolls past 3.27.
+- `IMPLEMENTATION_PLAN.md §10 'Folder conventions'`: marked every
+  planned subdirectory (`shell/`, `explorer/`, `grid/`, `pages/`,
+  `bindings/`, `state/`, `bridge/`) as future-state and recorded the
+  flat `app/lib/src/` shipped in M6 as the current layout. Removes
+  the contradiction between §2's flat tree and §10's subdir table.
+
 ### Fixed — codecov patch coverage on M6.5 (TASK-008 follow-up)
 
 - `core/liquid-sdk-bridge/src/registry.rs`: added
@@ -103,7 +402,7 @@ clippy clean; fmt clean.
   6 / 6 cases pass end-to-end against the shipped binary
   (workspace create → provision-agent → page write/read → audit
   list → page undo → AppViewer-cannot-write negative).
-- `tests/cli/10_cli_subcommands.bats` (new, 13 cases) covers per-
+- `tests/cli/10_cli_subcommands.bats` (new, 16 cases) covers per-
   subcommand edge cases the MVP slice does not: `--version`, no-
   args help-exit, bootstrap files (secret + token), registry
   cross-process persistence, `auth token` happy + no-token,

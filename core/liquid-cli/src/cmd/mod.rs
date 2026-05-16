@@ -2,6 +2,7 @@
 
 mod audit;
 mod auth;
+mod impersonate;
 mod page;
 mod parse;
 mod workspace;
@@ -18,9 +19,20 @@ use crate::services;
 pub async fn dispatch(cli: Cli) -> Result<Envelope> {
     let home = services::liquid_home()?;
     let services = services::build_services(&home)?;
+    // Resolve `--as` impersonation BEFORE the per-subcommand
+    // dispatch so every handler sees the impersonated token. Per
+    // the M7 contract this requires the caller hold `Action::Admin`
+    // on the target principal's workspace; the helper validates +
+    // mints a fresh short-lived token for the target.
+    if let Some(target) = cli.as_principal.as_deref() {
+        let new_token = impersonate::resolve(&services, &home, target).await?;
+        std::env::set_var("LIQUID_TOKEN", new_token);
+    }
     match cli.command {
         Commands::Workspace { action } => match action {
             WorkspaceCmd::Create { name } => workspace::create(&services, &home, name).await,
+            WorkspaceCmd::List => workspace::list(&services, &home).await,
+            WorkspaceCmd::Delete { id } => workspace::delete(&services, &home, &id).await,
         },
         Commands::Auth { action } => match action {
             AuthCmd::ProvisionAgent {
@@ -33,6 +45,12 @@ pub async fn dispatch(cli: Cli) -> Result<Envelope> {
                     .await
             }
             AuthCmd::Token => auth::token(&home),
+            AuthCmd::Login {
+                username,
+                password,
+                register,
+            } => auth::login(&services, &home, &username, &password, register).await,
+            AuthCmd::Whoami => auth::whoami(&services, &home).await,
         },
         Commands::Page { action } => match action {
             PageCmd::Write {
@@ -50,6 +68,11 @@ pub async fn dispatch(cli: Cli) -> Result<Envelope> {
                 workspace,
                 op,
             } => page::undo(&services, &home, &path, &workspace, &op).await,
+            PageCmd::History {
+                path,
+                workspace,
+                limit,
+            } => page::history(&services, &home, &path, &workspace, limit).await,
         },
         Commands::Audit { action } => match action {
             AuditCmd::List {
