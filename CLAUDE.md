@@ -270,7 +270,11 @@ git so it works identically on cloud Claude Code and local sessions.
 
 ### Rules (`.claude/rules/`)
 Rules are merged into context for matching paths: `testing.md`, `rust.md`
-(Cargo paths), `flutter.md` (Dart/Flutter paths).
+(Cargo paths), `flutter.md` (Dart/Flutter paths), `log-volume.md`
+(governs how any command expected to emit >50 lines must be routed —
+through `.claude/hooks/filter-test-output.sh`, the `test-triager`
+subagent, or `.claude/scripts/gh-job-log`; raw logs go to
+`.ai/artifacts/logs/`, summaries go to chat).
 
 ### Branch-name gate (`scripts/check-branch-name.sh`)
 

@@ -20,6 +20,13 @@ moved into a real version section when a release is cut.
 
 ### Added
 
+- `.claude/rules/log-volume.md` — formalises the "any command output
+  >50 lines must go through filter-test-output.sh, test-triager, or
+  gh-job-log" discipline that was scattered across the goal block,
+  the operating-mode bullets in CLAUDE.md, and a few skill files.
+  Now a single authoritative rule cited from `CLAUDE.md` Rules and
+  the `implement` skill's Operating-mode section.
+
 - `.claude/scripts/gh-job-log` — GitHub Actions workflow-log
   fetcher. `bash .claude/scripts/gh-job-log <run_id> [<job_id>]`
   pulls the run log via `gh run view --log-failed` (or `curl` + the

@@ -31,7 +31,10 @@ Then execute every step below in order.
 
 - Read only the files needed to understand the change. Do not preload large
   files. Use `rg`/`grep`/`Glob` for targeted lookups.
-- Pipe noisy command output through `.claude/hooks/filter-test-output.sh`:
+- **Log volume rule** (`.claude/rules/log-volume.md`): any command whose
+  stdout + stderr is expected to exceed ~50 lines MUST be routed through
+  `.claude/hooks/filter-test-output.sh` (or the `test-triager` subagent,
+  or — for CI logs — `.claude/scripts/gh-job-log`). Examples:
   ```sh
   cargo test 2>&1 | .claude/hooks/filter-test-output.sh
   flutter test 2>&1 | .claude/hooks/filter-test-output.sh
