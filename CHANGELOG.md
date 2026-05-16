@@ -20,6 +20,22 @@ moved into a real version section when a release is cut.
 
 ### Added
 
+- `scripts/bump-version.sh` + `just bump-version <new-semver>`
+  recipe — single source-of-truth bump for the workspace release
+  version. Atomically rewrites `[workspace.package].version` AND
+  every `liquid-* = { path = "...", version = "..." }` literal in
+  `[workspace.dependencies]` of `core/Cargo.toml`. Eliminates the
+  drift class where bumping the workspace version forgot one of
+  the 7 path-dep version literals (cargo treats path-only deps as
+  wildcards, which trips cargo-deny's `wildcards = "deny"` rule;
+  the path-dep literal MUST track the workspace version at all
+  times). The `core/Cargo.toml` workspace.package block now carries
+  a "LIQUID_VERSION" header comment pointing future maintainers at
+  the script. Covered by 8 bats cases in
+  `tests/cli/02_bump_version.bats` (semver acceptance, idempotency,
+  pre-release tags, leaves rust-version + third-party deps
+  untouched).
+
 - `commit-msg` lefthook step `changelog-discipline` running
   `.lefthook/commit-msg/check-changelog.sh`. Rejects `feat(*)` /
   `fix(*)` / `refactor(*)` / `perf(*)` / `chore(<non-tooling-scope>)`

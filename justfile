@@ -145,6 +145,15 @@ sync-docs-check:
 deny-check:
     cargo deny --manifest-path core/Cargo.toml check --config deny.toml
 
+# Atomically bump LIQUID_VERSION across `core/Cargo.toml`:
+# `[workspace.package].version` AND every `liquid-* = { path =
+# "...", version = "..." }` literal in `[workspace.dependencies]`.
+# Wrapped script lives at `scripts/bump-version.sh`; bats coverage
+# at `tests/cli/02_bump_version.bats`. Run before `cargo release`
+# at every Phase milestone so path-dep version literals never drift.
+bump-version new:
+    ./scripts/bump-version.sh {{new}}
+
 # ── Combined ──────────────────────────────────────────────────────────────────
 
 # Run ALL tests across every layer
