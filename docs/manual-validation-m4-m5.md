@@ -304,8 +304,9 @@ documented exceptions, each with a different reason:
   create a chicken-and-egg loop.
 
 The `api.rs` module doc-comment (lines 21-28) is the source of
-truth — re-read it if the spec ever drifts. The 5 inline tests
-+ 11 e2e tests pin the behaviour at every entry point.
+truth — re-read it if the spec ever drifts. The 5 `api` inline
+tests + 2 `registry` inline tests + 12 e2e tests pin the
+behaviour at every entry point.
 
 **Regression shape:** any new method that does not start with
 `validate_token`, OR a method that touches the store / mutates
