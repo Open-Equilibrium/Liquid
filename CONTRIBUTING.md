@@ -67,6 +67,7 @@ For decisions that contradict or extend an existing ADR, add a new ADR in
 | Docker | 24+ | <https://docs.docker.com/get-docker/> *(only needed for `just services-up` in Phase 3)* |
 | `bats` | latest | <https://bats-core.readthedocs.io/en/stable/installation.html> *(only needed once `tests/cli/` exists)* |
 | `cargo-deny` | latest | `cargo install --locked cargo-deny` *(needed for `just deny-check` / `just check`; lefthook's `pre-push` and CI's `audit.yml` run the same gate)* |
+| `cargo-tarpaulin` | `^0.31` | `cargo install --locked cargo-tarpaulin --version ^0.31` *(needed for `just coverage-check` / `just check`; matches the version pinned in `.github/workflows/ci.yml`'s Rust job)* |
 
 ### First-time setup
 
