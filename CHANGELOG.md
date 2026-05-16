@@ -74,6 +74,20 @@ moved into a real version section when a release is cut.
   cache + re-warm. Mirrors the per-milestone style of
   `m2_walkthrough` / `m3_walkthrough`.
 
+### Fixed — codecov report (liquid-cli stub exemption)
+
+- `.codecov.yml` now ignores `core/liquid-cli/**`, formalising the
+  `IMPLEMENTATION_PLAN.md §15` policy ("Coverage target: ≥ 80% line
+  coverage on all crates except `liquid-cli`"). PR #15 tripped the
+  `codecov/patch` check at 0% because the one-line stub-message
+  edit in `core/liquid-cli/src/main.rs` (commit `ed2e004`,
+  "fix(cli): correct stub pointer to M6.5/M7") is by definition
+  uncovered — `fn main()` exits 64 with an `eprintln!` and has no
+  test surface until M6.5 ships the MVP CLI grammar. The exemption
+  is documented inline in the YAML with a re-evaluate-at-M6.5
+  note so the next agent does not silently leave the binary
+  uncovered once it has a testable surface.
+
 ### Fixed — CLI scaffold pointer
 
 - `core/liquid-cli/src/main.rs` stub previously claimed the CLI grammar
