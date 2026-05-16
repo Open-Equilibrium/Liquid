@@ -56,3 +56,39 @@ log=".ai/artifacts/logs/session-start-${ts}.log"
 toolchain="$( (cargo --version 2>/dev/null || echo no-cargo) | awk '{print $1, $2}')"
 branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 echo "Liquid ready · branch=${branch} · ${toolchain} · log=${log}"
+
+# ── Compact resume snapshot (chat side, capped at 30 lines) ────────────────
+# Print a small, signal-only block so a resume turn does not have to
+# Read the obvious files to re-establish context. Sections:
+#
+#   * branch (echoed again so the block stands alone if the greeting
+#     scrolls off)
+#   * `git status --short` of the working tree (uncommitted edits +
+#     untracked files at a glance)
+#   * the 5 most-recently-modified tracked files (so the agent can
+#     orient on the conversation's likely focus)
+#
+# Each section is capped; the whole block stays well under 30 lines so
+# resume noise stays bounded. Outside a git repo (or with no commits
+# yet) every section silently no-ops — the canonical greeting above
+# is the only required output.
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  echo
+  echo "On branch: ${branch}"
+
+  short_status="$(git status --short 2>/dev/null | head -15 || true)"
+  if [ -n "$short_status" ]; then
+    echo "Working tree:"
+    printf '%s\n' "$short_status"
+  else
+    echo "Working tree: clean"
+  fi
+
+  recent="$(git log --pretty=format: --name-only --no-merges -n 25 2>/dev/null \
+            | awk 'NF && !seen[$0]++ { print; n++; if (n==5) exit }' \
+            || true)"
+  if [ -n "$recent" ]; then
+    echo "Recently modified:"
+    printf '  %s\n' $recent
+  fi
+fi
