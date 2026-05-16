@@ -10,49 +10,6 @@ Agents: read the task carefully, check the referenced milestone in
 
 ## Active tasks
 
-### [TASK-002] `ContentStore` trait + `InMemoryContentStore`
-
-**Phase:** 1
-**Milestone:** M2 (IMPLEMENTATION_PLAN.md §5.2, sub-tasks 1 & 3 of 4)
-**Status:** Done
-
-**What.** Define the `ContentStore` trait in `liquid-vcs` (per §4.1) and ship
-`InMemoryContentStore` — the test/dev backend that satisfies the trait without
-any Jujutsu dependency. Includes a typed `Operation` log with `Create | Update
-| Delete | Undo` variants and proper undo semantics. Trait error type
-normalises to `LiquidError` (the §4.1 spec used `StoreError`; we reconcile to
-the workspace-wide error type so cross-crate boundaries stay uniform).
-
-**Acceptance criteria.**
-- [x] `cargo test -p liquid-vcs` is green (12 tests incl. M2 plan-level criterion)
-- [x] `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` clean
-- [x] No `unwrap()`/`expect()` outside `#[cfg(test)]`
-- [x] `InMemoryContentStore` is `Send + Sync`
-- [x] `IMPLEMENTATION_PLAN.md` §4.1 updated to reflect the trait signature actually shipped
-
-### [TASK-003] `FilesystemContentStore` + ADR-001 (VCS persistence policy)
-
-**Phase:** 1
-**Milestone:** M2 (IMPLEMENTATION_PLAN.md §5.2, sub-task 2 — interim)
-**Status:** Done
-**Blocked by:** TASK-002
-
-**What.** Ship an on-disk `ContentStore` implementation under
-`<root>/<workspace_id>/` with atomic file writes (write-tmp + rename) and a
-JSON-line operation log. ADR-001 captures the decision to defer the
-`jj-lib`-backed `JujutsuContentStore` to TASK-004 (jj-lib's API is unstable;
-proving the on-disk persistence path against the trait gets us the
-operationally important property — durability — without committing to a
-specific upstream version this session).
-
-**Acceptance criteria.**
-- [x] `cargo test -p liquid-vcs` is green for both InMemory and Filesystem stores (26 tests)
-- [x] `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` clean
-- [x] No `unwrap()`/`expect()` outside `#[cfg(test)]`
-- [x] Workspace data persists across `FilesystemContentStore` instances
-- [x] Op log survives process restart (verified by re-opening the same root)
-- [x] `docs/adr/001-jujutsu-pinning.md` accepted
-
 ### [TASK-004] `JujutsuContentStore` via `jj-lib`
 
 **Phase:** 1
@@ -102,6 +59,49 @@ and the `--as` impersonation flag. Every mutation continues to run
 ---
 
 ## Done tasks
+
+### [TASK-002] `ContentStore` trait + `InMemoryContentStore`
+
+**Phase:** 1
+**Milestone:** M2 (IMPLEMENTATION_PLAN.md §5.2, sub-tasks 1 & 3 of 4)
+**Status:** Done
+
+**What.** Define the `ContentStore` trait in `liquid-vcs` (per §4.1) and ship
+`InMemoryContentStore` — the test/dev backend that satisfies the trait without
+any Jujutsu dependency. Includes a typed `Operation` log with `Create | Update
+| Delete | Undo` variants and proper undo semantics. Trait error type
+normalises to `LiquidError` (the §4.1 spec used `StoreError`; we reconcile to
+the workspace-wide error type so cross-crate boundaries stay uniform).
+
+**Acceptance criteria.**
+- [x] `cargo test -p liquid-vcs` is green (12 tests incl. M2 plan-level criterion)
+- [x] `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` clean
+- [x] No `unwrap()`/`expect()` outside `#[cfg(test)]`
+- [x] `InMemoryContentStore` is `Send + Sync`
+- [x] `IMPLEMENTATION_PLAN.md` §4.1 updated to reflect the trait signature actually shipped
+
+### [TASK-003] `FilesystemContentStore` + ADR-001 (VCS persistence policy)
+
+**Phase:** 1
+**Milestone:** M2 (IMPLEMENTATION_PLAN.md §5.2, sub-task 2 — interim)
+**Status:** Done
+**Blocked by:** TASK-002
+
+**What.** Ship an on-disk `ContentStore` implementation under
+`<root>/<workspace_id>/` with atomic file writes (write-tmp + rename) and a
+JSON-line operation log. ADR-001 captures the decision to defer the
+`jj-lib`-backed `JujutsuContentStore` to TASK-004 (jj-lib's API is unstable;
+proving the on-disk persistence path against the trait gets us the
+operationally important property — durability — without committing to a
+specific upstream version this session).
+
+**Acceptance criteria.**
+- [x] `cargo test -p liquid-vcs` is green for both InMemory and Filesystem stores (26 tests)
+- [x] `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` clean
+- [x] No `unwrap()`/`expect()` outside `#[cfg(test)]`
+- [x] Workspace data persists across `FilesystemContentStore` instances
+- [x] Op log survives process restart (verified by re-opening the same root)
+- [x] `docs/adr/001-jujutsu-pinning.md` accepted
 
 ### [TASK-010] M4 cache layer stub — `ReadCache` + `InProcessCache` + `CachedContentStore`
 
