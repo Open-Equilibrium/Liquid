@@ -20,6 +20,17 @@ moved into a real version section when a release is cut.
 
 ### Added
 
+- Pre-push branch-name gate (`scripts/check-branch-name.sh`, wired
+  into `lefthook.yml`'s `pre-push` hook). Rejects pushes from `main`,
+  bare `claude`, or any `claude/*` branch — the Claude Code agent
+  autobranch namespace — forcing the change onto a `feature/<topic>`
+  / `fix/<topic>` branch before it can reach the remote. Eleven bats
+  cases in `tests/cli/01_branch_name_gate.bats` cover the gate
+  (exact-match `main`, `claude` family including nested paths,
+  substring-only acceptances like `feat/handle-claude-feedback` and
+  `feat/main-page-redesign`, and the empty-string caller-bug path
+  that exits 2 instead of silently falling through to git detection).
+
 - `just deny-check` recipe and matching pre-push lefthook step
   wrapping `cargo deny --manifest-path core/Cargo.toml check --config
   deny.toml`. `just check` now chains `lint → test → deny-check`, so

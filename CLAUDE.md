@@ -267,6 +267,22 @@ git so it works identically on cloud Claude Code and local sessions.
 Rules are merged into context for matching paths: `testing.md`, `rust.md`
 (Cargo paths), `flutter.md` (Dart/Flutter paths).
 
+### Branch-name gate (`scripts/check-branch-name.sh`)
+
+A `pre-push` lefthook step rejects any push from a branch whose name
+is one of:
+
+- exactly `main` (changes land on `main` via PR review, not direct
+  push)
+- exactly `claude`, or any branch starting with `claude/` — the
+  Claude Code agent autobranch namespace
+
+Agents and humans must rebase onto a `feature/<topic>` or
+`fix/<topic>` branch and push there. Substring matches are not
+blocked, so legitimate branches like `feat/handle-claude-feedback`
+or `feat/main-page-redesign` are unaffected. Covered by 11 cases in
+`tests/cli/01_branch_name_gate.bats`.
+
 ### Hooks (`.claude/hooks/`)
 - `session-start.sh` — `SessionStart` hook. Logs toolchain versions, branch,
   HEAD, and best-effort `cargo fetch --locked` to warm the registry. Output

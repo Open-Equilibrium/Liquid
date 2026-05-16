@@ -41,6 +41,12 @@ commit-msg:
 pre-push:
   parallel: true
   commands:
+    # Branch-name gate (CLAUDE.md "Mandatory Development Workflow").
+    # Rejects pushes to `main` or `claude/*`; covered by
+    # tests/cli/01_branch_name_gate.bats.
+    branch-name:
+      run: ./scripts/check-branch-name.sh
+
     rust-tests:
       run: sh -c '[ ! -f core/Cargo.toml ] || cargo test --manifest-path core/Cargo.toml --workspace'
 
