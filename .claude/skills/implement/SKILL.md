@@ -101,6 +101,29 @@ cd sdk/liquid_sdk && flutter test                        # all green
 bats tests/cli/<feature>.bats                            # all green
 ```
 
+**Before invoking `code-reviewer` (Step 6 / the pre-commit hook),
+run these two cheap pre-flight checks on every Rust crate you
+touched.** They catch the two most common review-blocker classes in
+under five seconds — way faster than waiting for the subagent to
+flag them:
+
+```sh
+# 1. Does it still compile? cargo check is ~10× faster than cargo
+#    test and surfaces type errors the reviewer cannot fix for you.
+cargo check --manifest-path core/Cargo.toml -p <crate>
+
+# 2. Did any new `unwrap()` / `expect()` slip into src/?
+#    Project Absolute Rule 1 forbids them outside `#[cfg(test)]`.
+#    `cfg.test` matches both `#[cfg(test)]` modules and
+#    `#![cfg_attr(test, allow(...))]` attributes.
+grep -nE 'unwrap\(\)|expect\(' core/<crate>/src/ | grep -vE 'cfg.*test'
+```
+
+Either output a finding ⇒ fix it before staging the diff. Treat both
+as hard gates: a non-empty grep result is a Rule-1 violation
+regardless of context, and a failing `cargo check` means the
+code-reviewer is reading broken code.
+
 **Hard gate:** If you wrote code no test exercises, delete it before moving on.
 
 ---
