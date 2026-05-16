@@ -16,4 +16,17 @@ workspace = true
 
 [dependencies]
 liquid-core.workspace = true
+liquid-auth.workspace = true
+liquid-permissions.workspace = true
+liquid-vcs.workspace = true
 liquid-sdk-bridge.workspace = true
+
+bytes.workspace = true
+clap = { version = "4.5", features = ["derive", "env"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }
+uuid = { workspace = true, features = ["v5"] }
+
+[dev-dependencies]
+tempfile.workspace = true

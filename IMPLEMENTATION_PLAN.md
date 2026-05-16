@@ -669,29 +669,73 @@ See [§12 Agent CLI Specification](#12-agent-cli-specification) for the full
 command grammar. M6.5 implements only the slice that unblocks the
 MVP-slice acceptance test (`tests/cli/00_mvp_slice.bats`):
 
-- [ ] `liquid workspace create <name>`
-- [ ] `liquid auth provision-agent <name> --workspace <id> --role <role>`
-- [ ] `liquid auth token` — print a session token
-- [ ] `liquid page write <page-path> --workspace <id> --data <json>`
-      *or* `--file <json-file>` (one of the two; pick `--data` to match §12)
-- [ ] `liquid page read <page-path> --workspace <id>`
-- [ ] `liquid audit list --workspace <id>` — read-only view of the
+- [x] `liquid workspace create <name>` — bootstraps a default `cli`
+      user + token under `$LIQUID_HOME` on first run; calls
+      `BridgeServices::create_workspace`; assigns the caller
+      `WorkspaceOwner`.
+- [x] `liquid auth provision-agent <name> --workspace <id> --role <role>`
+      `--scope <uuid>` required for the scope-required roles
+      `AppViewer` / `AppEditor` (see §9). Caller must hold
+      `Action::Admin` on the workspace.
+- [x] `liquid auth token` — prints the active bearer token (from
+      `$LIQUID_TOKEN` env var or `$LIQUID_HOME/token`).
+- [x] `liquid page write <page-path> --workspace <id> --data <json>`
+      *or* `--file <path>` (one of the two). Runs
+      `require_permission!(Write, Page(_))` before delegating to
+      `ContentStore::write`.
+- [x] `liquid page read <page-path> --workspace <id>` —
+      `require_permission!(Read, Page(_))` first; deserialises the
+      stored bytes as JSON for the envelope's `data` field.
+- [x] `liquid audit list --workspace <id>` — read-only view of the
       `op_log.jsonl` produced by `FilesystemContentStore`, filterable by
-      principal/action/since
-- [ ] `liquid page undo <page-path> --op <operation-id>`
+      `--principal` / `--action` / `--since`. NDJSON emit when
+      `--format json`. Maps `OperationKind::{Create,Update}` to the
+      user-visible `Write` verb so the `--action Write` filter
+      catches both.
+- [x] `liquid page undo <page-path> --op <operation-id>` —
+      `require_permission!(Write, Page(_))` first; delegates to
+      `ContentStore::undo`.
 
-Authentication: token from `LIQUID_TOKEN` env var or `~/.liquid/token`.
-Every command validates the token against `IdentityProvider` before
-executing, and every write/undo command runs `require_permission!`
-against the resolved principal before mutating anything (Absolute
-Rule 4). Output respects `--format text|json` (§12).
+Authentication: token from `LIQUID_TOKEN` env var or
+`$LIQUID_HOME/token`. Every command validates the token against
+`IdentityProvider` before executing, and every write/undo command
+runs `require_permission!` against the resolved principal before
+mutating anything (Absolute Rule 4). Output respects
+`--format text|json` (§12).
+
+**Page-path mapping.** The user-supplied `<page-path>` (e.g.
+`/pages/welcome`) is normalised to a workspace-relative `StorePath`
+by stripping the leading `/`. The corresponding `PageId` used in
+`require_permission!(Resource::Page(_))` is derived from
+`Uuid::new_v5(workspace_uuid, path_bytes)` so the same path maps
+to the same `PageId` within a workspace and never collides across
+workspaces — satisfying the §4.2 globally-unique-UUID
+tenant-isolation assumption.
+
+**State layout.** All on-disk state lives under `$LIQUID_HOME`
+(defaults to `$HOME/.liquid`):
+
+```text
+$LIQUID_HOME/
+  auth/      — LocalIdentityProvider (users.toml + agents.toml)
+  vcs/       — FilesystemContentStore (per-workspace dirs)
+  perm/      — FilesystemPermissionIndex (per-workspace perms.toml)
+  registry/  — FilesystemWorkspaceRegistry (workspaces.toml)
+  secret     — HMAC-SHA256 key bytes (≥16; first run generates 32)
+  token      — default bootstrap bearer token (one line; first run only)
+```
 
 **Success criterion (MVP slice):** `bats tests/cli/00_mvp_slice.bats`
 passes — i.e. a shell script provisions an agent token, creates a
 workspace, writes a page, reads it back, prints the audit log entry
 for the write, undoes the write, and re-reads the page to confirm the
-undo. Tracks the same data path the Flutter shell will eventually
-display.
+undo. Plus the AppViewer-cannot-write negative path (Absolute Rule 4
+proof). Companion focused suite:
+`tests/cli/10_cli_subcommands.bats` (13 cases — version, no-args,
+bootstrap files, registry persistence, `auth token` happy + no-token,
+invalid workspace UUID, `--file` body source, NotFound on unknown
+read, `--action Write` filter, text-format summary + stderr error).
+Manual validation: [`docs/manual-validation-m6.5.md`](docs/manual-validation-m6.5.md).
 
 ---
 
@@ -1295,12 +1339,33 @@ M6.5's CLI persistence work.
 ### `liquid-cli`
 **Purpose:** `liquid` binary for agent interactions.
 
-**Dependencies:** `liquid-sdk-bridge` (reuses the same Rust logic, not the FFI layer), `clap`
+**Dependencies:** `liquid-core`, `liquid-auth`, `liquid-permissions`,
+`liquid-vcs`, `liquid-sdk-bridge` (composes `BridgeServices` directly —
+no FFI layer; the bridge's strongly-typed Rust surface is the
+canonical caller); `clap` (arg parsing), `tokio` (current-thread
+runtime), `serde` / `serde_json` (envelope + audit NDJSON),
+`uuid` (`v5` for the page-path → `PageId` derivation; `v4` for the
+bootstrap-secret material), `bytes` (page payload bytes).
 
-**Authentication:** `LIQUID_TOKEN` env var → validated by `IdentityProvider` on
-every command.
+**Authentication:** `LIQUID_TOKEN` env var → `$LIQUID_HOME/token`
+fallback → validated by `IdentityProvider` on every command. The
+first `workspace create` on a fresh `$LIQUID_HOME` bootstraps a
+default `cli` user + token (random password, never persisted; only
+the HMAC-signed token lives on disk).
 
-See [§12 Agent CLI Specification](#12-agent-cli-specification).
+**State layout** (per §5.6): `$LIQUID_HOME` (defaults to
+`$HOME/.liquid`) contains `auth/`, `vcs/`, `perm/`, `registry/`,
+plus `secret` (HMAC key) and `token` (bootstrap bearer).
+
+**Phase-1 surface** (M6.5 / TASK-008 Done): the seven subcommands
+documented in §5.6. **Phase-1 remaining** (M7 / TASK-009 Planned):
+`workspace list / delete`, `page history`, `auth login / whoami`,
+`app …`, `--as` impersonation flag.
+
+See [§12 Agent CLI Specification](#12-agent-cli-specification) for
+the command grammar and
+[`docs/manual-validation-m6.5.md`](docs/manual-validation-m6.5.md)
+for the manual validation walkthrough.
 
 ---
 
@@ -1495,21 +1560,22 @@ named slot — which goes through the `SlotBroker` permission check in Rust.
 
 ## 12. Agent CLI Specification
 
-> **Implementation status.** The `liquid` binary
-> (`core/liquid-cli/src/main.rs`) is currently a stub that exits
-> `64` (`EX_USAGE`) with a pointer to this section. The MVP-slice
-> subset (`workspace create`, `auth provision-agent`, `auth token`,
-> `page write`, `page read`, `audit list`, `page undo`) lands in
-> M6.5 (§5.6, TASK-008); the remainder of the grammar below lands
-> in M7 (§5.8, TASK-009). The spec is stable; treat the binary as
-> not-yet-implemented until those tasks close.
+> **Implementation status.** The M6.5 subset (`workspace create`,
+> `auth provision-agent`, `auth token`, `page write`, `page read`,
+> `audit list`, `page undo`) ships in TASK-008 — Done. Manual
+> validation: [`docs/manual-validation-m6.5.md`](docs/manual-validation-m6.5.md).
+> The remainder of the grammar below (`workspace list / delete`,
+> `page history`, `auth login / whoami`, `app …`, `--as`) lands
+> in M7 (§5.8, TASK-009 — Planned).
 
 ### Authentication
 
 Every command requires a valid token, provided via:
 1. `LIQUID_TOKEN` environment variable (preferred for automation)
-2. `~/.liquid/token` file (written by `liquid auth login`)
-3. `--token <value>` flag (not recommended — visible in process list)
+2. `$LIQUID_HOME/token` file (written by the first `workspace create`
+   bootstrap, or by the eventual `auth login` in M7).
+3. `--token <value>` flag (not recommended — visible in process
+   list; planned for M7).
 
 ### Command grammar
 

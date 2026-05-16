@@ -305,7 +305,7 @@ documented exceptions, each with a different reason:
 
 The `api.rs` module doc-comment (lines 21-28) is the source of
 truth — re-read it if the spec ever drifts. The 5 `api` inline
-tests + 2 `registry` inline tests + 12 e2e tests pin the
+tests + 6 `registry` inline tests + 12 e2e tests pin the
 behaviour at every entry point.
 
 **Regression shape:** any new method that does not start with
@@ -331,8 +331,12 @@ cargo clippy --manifest-path core/Cargo.toml -p liquid-sdk-bridge \
 - `liquid-sdk-bridge::api` inline unit tests: **5 passed; 0
   failed** (parse-principal happy / unknown-kind / missing-colon
   / bad-uuid; `page_path` canonical form).
-- `liquid-sdk-bridge::registry` inline unit tests: **2 passed;
-  0 failed** (duplicate-id rejection; newest-first sort).
+- `liquid-sdk-bridge::registry` inline unit tests: **6 passed;
+  0 failed** (in-memory: duplicate-id rejection + newest-first
+  sort; filesystem: persistence across `open()` calls,
+  duplicate-id rejection, malformed-TOML rejection, registry
+  path resolution — added when `FilesystemWorkspaceRegistry`
+  shipped alongside M6.5).
 - `liquid-sdk-bridge::m5_end_to_end` integration suite:
   **12 passed; 0 failed** — empty-name rejection,
   tampered-token rejection on `create_workspace`, registry

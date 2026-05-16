@@ -18,6 +18,52 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Added — M6.5 minimal agent CLI (TASK-008)
+
+- `core/liquid-cli/src/` — the seven §5.6 subcommands ship as a
+  real `liquid` binary (replaces the prior `exit 64` stub):
+  `workspace create`, `auth provision-agent`, `auth token`,
+  `page write`, `page read`, `audit list`, `page undo`. Every
+  command starts with `token::require → validate_token`; every
+  mutating arm calls `require_permission!` next (Absolute Rule 4).
+  `workspace create` on a fresh `$LIQUID_HOME` bootstraps a
+  default `cli` user + 32-byte HMAC secret + bearer token so the
+  first invocation has no manual setup. clap-derive arg parsing,
+  tokio current-thread runtime, NDJSON / text output via the
+  `Envelope { ok, data, records, error }` shape.
+- State layout under `$LIQUID_HOME` (defaults to `$HOME/.liquid`):
+  `auth/` (LocalIdentityProvider), `vcs/` (FilesystemContentStore),
+  `perm/` (FilesystemPermissionIndex), `registry/`
+  (FilesystemWorkspaceRegistry), `secret` (HMAC bytes), `token`
+  (bearer). Documented in §9 `liquid-cli` + §5.6.
+- `liquid_sdk_bridge::FilesystemWorkspaceRegistry` — durable
+  Phase-1 sibling to `InMemoryWorkspaceRegistry`. Persists to
+  `<root>/workspaces.toml` via atomic tmp-then-rename (same
+  ADR-001 idiom as `FilesystemContentStore` /
+  `FilesystemPermissionIndex`). The CLI re-opens it on every
+  invocation; workspace metadata survives process restart.
+  Backfills the §M5 follow-up flagged in `TASK-011`.
+- `tests/cli/00_mvp_slice.bats` flipped from skip-only to live:
+  6 / 6 cases pass end-to-end against the shipped binary
+  (workspace create → provision-agent → page write/read → audit
+  list → page undo → AppViewer-cannot-write negative).
+- `tests/cli/10_cli_subcommands.bats` (new, 13 cases) covers per-
+  subcommand edge cases the MVP slice does not: `--version`, no-
+  args help-exit, bootstrap files (secret + token), registry
+  cross-process persistence, `auth token` happy + no-token,
+  invalid workspace UUID, `--data` / `--file` mutual exclusion +
+  `--file` body source, NotFound on unknown read, `--action Write`
+  filter, text-format summary + stderr error.
+- `docs/manual-validation-m6.5.md` (new) — auditable companion to
+  `bats tests/cli/`; walks a human reviewer through bootstrap,
+  every subcommand happy path, the AppViewer-cannot-write
+  negative, surface invariants by inspection, and a
+  cross-process persistence smoke.
+- `justfile coverage-check` now passes `--exclude-files
+  'liquid-cli/*'` to tarpaulin, matching `.codecov.yml`'s
+  long-standing `core/liquid-cli/**` exemption (per §15 — the
+  CLI's behaviour test is bats, which tarpaulin does not see).
+
 ### Added — M5 Rust-side FFI bridge (TASK-011)
 
 - `liquid-sdk-bridge::BridgeServices<S, P, I, R>` — generic
