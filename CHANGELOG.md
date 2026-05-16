@@ -57,10 +57,11 @@ moved into a real version section when a release is cut.
 - Abstract runtime APIs (concrete impls land with TASK-012):
   `GridApi`, `VcsApi` (+ `HistoryEntry`), `PermissionApi`,
   `SlotEmitter`, `SlotConsumer`.
-- `sdk/liquid_sdk/test/liquid_sdk_test.dart` (6 cases) — the M8
+- `sdk/liquid_sdk/test/liquid_sdk_test.dart` (8 cases) — the M8
   success criterion (`_ResetCounter` stub component declares one
-  input + one output) + SlotValue matcher routing + AppManifest
-  round-trip.
+  input + one output) + `SlotValue` matcher routing + `SlotValue.json`
+  and `SlotValue.bytes` structural-equality regressions +
+  `AppManifest` round-trip.
 
 ### Added — M9 Rust-side data binding broker (TASK-016a)
 
@@ -75,12 +76,14 @@ moved into a real version section when a release is cut.
   round-trip.
 - `SharedBroker = Arc<dyn SlotBroker>` type alias for the
   bridge to share across FFI workers.
-- 9 inline tests in `core/liquid-bindings/src/broker.rs` —
+- 12 inline tests in `core/liquid-bindings/src/broker.rs` —
   publish-no-subscribers / publish-then-receive (one + two
   subscribers) / wire fans out / self-wire rejection / wire is
-  idempotent / save→load round-trip survives a fresh broker
-  (proves wiring replay works on page reload) / load rejects
-  self-wires.
+  idempotent / 2-hop cycle rejection via `wire` / 3-hop cycle
+  rejection via `wire` / save→load round-trip survives a fresh
+  broker (proves wiring replay works on page reload) / load
+  rejects self-wires / load rejects multi-hop cycles /
+  `BindingsDocument` JSON round-trip.
 
 Carved out for follow-ups (each tracked in `TASKS.md`):
 TASK-016b (wiring UI on `PageGrid`, blocked on M6 page tooling
@@ -143,6 +146,23 @@ generation, blocked on TASK-012).
 publish` deferred to TASK-014 (planned, blocked on M8 —
 `AppManifest`). The §5.8 spec checkboxes for those rows stay
 unticked with an inline pointer.
+
+### Fixed — Post-M6-M9 audit (PR #18 review pass, round 4)
+
+- `README.md` Status table M8 / M9 rows: test counts corrected
+  from `6 tests` → `8 tests` (M8) and `9 tests` → `12 tests`
+  (M9, with the cycle-rejection note appended).
+- `CHANGELOG.md` `Added — M8` / `Added — M9` bullets: same count
+  + scenario corrections so the original feature description
+  matches the shipped state of the test suites.
+- `TASKS.md` Done-section criteria for TASK-015 / TASK-016a:
+  same count corrections.
+- `app/lib/src/page_area.dart` + `app/test/widget_test.dart`:
+  toolbar tooltips and the matching widget-test reason replaced
+  the stale `(pending M8)` text with the accurate
+  `(pending TASK-012 VcsApi wiring)` blocker — M8 (typed surface)
+  has shipped; only the concrete FFI-backed runtime APIs are
+  still pending TASK-012.
 
 ### Fixed — Post-M6-M9 audit (PR #18 review pass, round 3)
 

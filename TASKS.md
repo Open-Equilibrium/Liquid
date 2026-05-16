@@ -178,7 +178,10 @@ Plus `SharedBroker` type alias (`Arc<dyn SlotBroker>`) ready for
 the bridge to share across FFI workers.
 
 **Acceptance criteria.**
-- [x] `cargo test -p liquid-bindings` is green (9 inline tests).
+- [x] `cargo test -p liquid-bindings` is green (12 inline tests —
+      the original 9 plus 2-hop + 3-hop `wire` cycle rejection and
+      multi-hop `load_bindings` cycle rejection added in the PR #18
+      audit response).
 - [x] `cargo clippy --workspace --all-targets --locked -- -D
       warnings` clean.
 - [x] No `unwrap()` / `expect()` outside `#[cfg(test)]`.
@@ -203,10 +206,10 @@ TASK-012; the M8 SDK's job is the *typed surface developers
 extend*.
 
 **Acceptance criteria.**
-- [x] `flutter test` is green (6 / 6 cases covering the M8
-      plan-level success criterion — a `_ResetCounter` stub
-      component declares one input + one output and exposes the
-      typed surface).
+- [x] `flutter test` is green (8 / 8 cases — the M8 plan-level
+      success criterion via a `_ResetCounter` stub component plus
+      `SlotValue.json` / `SlotValue.bytes` structural-equality
+      regressions added in the PR #18 audit response).
 - [x] `flutter analyze` clean.
 - [x] `IMPLEMENTATION_PLAN.md §6.1` ticks every checkbox + the
       ones marked "abstract surface; concrete impl pending

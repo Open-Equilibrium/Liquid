@@ -1,9 +1,12 @@
 /// `PageArea` — the right-hand region. Hosts the page toolbar
 /// and the `PageGrid` for the currently-selected workspace.
 ///
-/// Phase-2 stub: empty toolbar verbs (`save`, `history`, `share`
-/// land with M7 / TASK-009 + M8 follow-ups); the grid below is
-/// a real M6 widget with a placeholder grid item.
+/// Phase-2 stub: the `save` / `history` toolbar verbs wait for the
+/// concrete FFI-backed `VcsApi` that lands with TASK-012 (M8's
+/// abstract surface has shipped; only the bridge codegen is left).
+/// The `share` verb waits for TASK-014 (`liquid app …`
+/// subcommands). The grid below is a real M6 widget with a
+/// placeholder grid item.
 
 library;
 
@@ -58,13 +61,13 @@ class _Toolbar extends StatelessWidget {
             const IconButton(
               key: Key('toolbar-save'),
               icon: Icon(Icons.save_outlined),
-              tooltip: 'Save (pending M8)',
+              tooltip: 'Save (pending TASK-012 VcsApi wiring)',
               onPressed: null,
             ),
             const IconButton(
               key: Key('toolbar-history'),
               icon: Icon(Icons.history),
-              tooltip: 'History (pending M8)',
+              tooltip: 'History (pending TASK-012 VcsApi wiring)',
               onPressed: null,
             ),
           ],

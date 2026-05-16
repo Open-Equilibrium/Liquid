@@ -55,6 +55,7 @@ void main() {
     expect(tester.widget<IconButton>(add).onPressed, isNotNull);
     final save = find.byKey(const Key('toolbar-save'));
     expect(tester.widget<IconButton>(save).onPressed, isNull,
-        reason: 'save is pending the M8 VcsApi.write wiring');
+        reason: 'save is pending the concrete FFI-backed VcsApi.write '
+            'wiring that lands with TASK-012');
   });
 }
