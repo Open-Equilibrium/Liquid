@@ -43,12 +43,24 @@ ignore = []
 # ── License policy ───────────────────────────────────────────────────────────
 # Policy: Liquid is shipped under Apache-2.0 (see LICENSE). Transitive
 # dependencies must therefore use a license that is *compatible* with our
-# Apache-2.0 release. We allow:
+# Apache-2.0 release. We allow ONLY the licenses that some crate in the
+# current dependency graph actually uses:
 #
 #   - Apache-2.0 (matches the project license)
 #   - MIT / BSD-2/3-Clause / ISC (permissive, fully compatible with Apache-2.0)
-#   - Unicode-DFS-2016 / Unicode-3.0 (used by `unicode-ident` and friends)
-#   - Zlib (used by some byte-twiddling crates)
+#   - Unicode-3.0 (current `unicode-ident` ships under
+#     `(MIT OR Apache-2.0) AND Unicode-3.0` — the `AND` makes
+#     Unicode-3.0 mandatory)
+#
+# Allowances are added one at a time as a real new transitive dependency
+# requires them — never speculatively. `Zlib` and `CC0-1.0` were
+# allowed historically but no crate in the workspace actually used
+# them, so they were dropped (cargo-deny emitted
+# `license-not-encountered` warnings on every run). `Unicode-DFS-2016`
+# was also unused at trim time and removed for the same reason; re-add
+# only when a crate genuinely requires it (the failure mode is a clean
+# cargo-deny error pointing at the rejecting crate, which lets us
+# audit and re-add intentionally).
 #
 # We deny *every* copyleft license outright — GPL/LGPL/AGPL/MPL/CC* require
 # additional release-time effort that pre-1.0 Liquid is not equipped to
@@ -63,10 +75,7 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
-    "Unicode-DFS-2016",
     "Unicode-3.0",
-    "Zlib",
-    "CC0-1.0",
 ]
 confidence-threshold = 0.93
 exceptions = []

@@ -18,6 +18,23 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Changed
+
+- `deny.toml` license allow-list trimmed: removed `Zlib`,
+  `Unicode-DFS-2016`, and `CC0-1.0` — none were in use by any crate
+  in the current dependency graph, and cargo-deny was emitting
+  `license-not-encountered` warnings on every run. The principle is
+  "add allowances as a real new transitive dependency requires them,
+  never speculatively"; the failure mode for a removed-too-eagerly
+  license is a clean cargo-deny error pointing at the rejecting
+  crate, which lets the maintainer audit and re-add intentionally.
+  Note: `Unicode-3.0` was on the trim list per the original goal,
+  but `unicode-ident-1.0.24` ships under `(MIT OR Apache-2.0) AND
+  Unicode-3.0` — the AND makes it mandatory — so it stays. `ISC`
+  and `BSD-2-Clause` are also currently unmatched but kept (commonly
+  required by future transitive deps; they will be revisited when
+  they appear in `cargo-deny check` warnings again).
+
 ### Added
 
 - `scripts/bump-version.sh` + `just bump-version <new-semver>`
