@@ -262,6 +262,11 @@ git so it works identically on cloud Claude Code and local sessions.
 - `ui-validator` (sonnet, read-only) — validates Flutter UI via existing
   widget/integration/golden tooling. Does not add Playwright.
 - `code-reviewer` (sonnet, read-only) — reviews the current diff.
+- `github-pr` (haiku, read-only) — inspects PRs, issues, branches,
+  commits, and CI status on `open-equilibrium/liquid` via the
+  `mcp__github__*` read tools only. Cannot push, comment, merge, or
+  modify any GitHub state — for writes, the main agent calls the
+  matching `mcp__github__*` write tool directly.
 
 ### Rules (`.claude/rules/`)
 Rules are merged into context for matching paths: `testing.md`, `rust.md`

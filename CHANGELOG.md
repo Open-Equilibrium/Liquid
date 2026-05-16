@@ -20,6 +20,16 @@ moved into a real version section when a release is cut.
 
 ### Added
 
+- `.claude/agents/github-pr.md` — dedicated read-only GitHub
+  inspector subagent (haiku). Restricted to the `mcp__github__*` read
+  tools only (no comment / merge / push capability). Use for "what's
+  the state of PR #N?", "which open PRs touch crate X?", "is there
+  an open issue about Y?", etc. Writes still go through the main
+  agent invoking the matching `mcp__github__*` write tool directly.
+- `scripts/ai-check.sh` step 3b: assert every `.claude/agents/*.md`
+  file on disk is mentioned in CLAUDE.md (catches the inverse of
+  step 3 — a new agent added to disk but forgotten in the docs).
+
 - `.claude/hooks/pre-commit-review.sh` — `PreToolUse` hook matched on
   `Bash(git commit*)`. Snapshots `git diff --staged` to
   `.ai/artifacts/diffs/pre-commit-<ts>.diff`, returns

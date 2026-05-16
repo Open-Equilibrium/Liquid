@@ -11,6 +11,9 @@
 #   2. Every `.claude/hooks/*.sh` parses with `bash -n`.
 #   3. Every `.claude/{skills,agents,rules,hooks}/<name>` path mentioned in
 #      `CLAUDE.md` resolves to an actual file or directory on disk.
+#   3b. Every `.claude/agents/*.md` file on disk is mentioned in CLAUDE.md
+#      (either by full path or by backtick-wrapped bare name in the
+#      Subagents bullet list).
 #   4. `.claude/hooks/filter-test-output.sh` produces non-empty output when
 #      fed `tests/fixtures/noisy-cargo.log` on stdin.
 
@@ -89,6 +92,29 @@ else
       fi
     done <<<"$refs"
   fi
+fi
+
+# ── 3b. every subagent on disk is documented in CLAUDE.md ────────────────────
+# A subagent that exists but is undocumented is invisible to agents reading
+# CLAUDE.md; a subagent that is documented but missing already fails check 3
+# above. This catches the inverse: drop a new agent file in `.claude/agents/`
+# and forget to mention it in CLAUDE.md.
+say "[3b/4] .claude/agents/*.md vs CLAUDE.md mentions"
+agent_count=0
+for agent in .claude/agents/*.md; do
+  [ -f "$agent" ] || continue
+  agent_count=$((agent_count + 1))
+  name=$(basename "$agent" .md)
+  # Accept either the full path reference or a backtick-wrapped
+  # bare name in CLAUDE.md's Subagents bullet list.
+  if grep -qE "(\.claude/agents/${name}(\.md)?|\`${name}\`)" CLAUDE.md 2>/dev/null; then
+    ok ".claude/agents/${name}.md mentioned in CLAUDE.md"
+  else
+    bad ".claude/agents/${name}.md exists on disk but is not mentioned in CLAUDE.md"
+  fi
+done
+if [ "$agent_count" -eq 0 ]; then
+  bad "no agents found under .claude/agents/"
 fi
 
 # ── 4. filter-test-output.sh smoke test ───────────────────────────────────────
