@@ -173,7 +173,9 @@ cd sdk/liquid_sdk && flutter test 2>&1 | tail -5
 flutter analyze 2>&1 | tail -3
 ```
 
-**Expected:** 6 / 6 test cases pass. `flutter analyze` reports
+**Expected:** 8 / 8 test cases pass (the original 6 plus the
+PR #18 audit-pass `SlotValue.json` and `SlotValue.bytes`
+structural-equality regressions). `flutter analyze` reports
 `No issues found!`.
 
 ### Step M8.2 — API surface inventory
@@ -211,7 +213,7 @@ before merge.
 ## M9 — Data binding broker (`liquid-bindings` Rust side)
 
 **Spec:** `IMPLEMENTATION_PLAN.md §6.2`. **Success criterion
-(Rust side):** the 9 inline tests in
+(Rust side):** the 12 inline tests in
 `core/liquid-bindings/src/broker.rs` cover the §6.2 contract.
 The "spreadsheet emits → chart updates" demonstration is the
 Dart-side success criterion, deferred to TASK-012 + TASK-016b.
@@ -223,15 +225,18 @@ cargo test --manifest-path core/Cargo.toml -p liquid-bindings \
   2>&1 | .claude/hooks/filter-test-output.sh
 ```
 
-**Expected:** 9 / 9 cases pass:
+**Expected:** 12 / 12 cases pass:
 - `publish_with_no_subscribers_returns_zero`
 - `subscribe_then_publish_delivers_one_message`
 - `two_subscribers_each_get_their_own_copy`
 - `wire_routes_publishes_to_downstream_subscribers`
 - `wire_rejects_self_loop`
 - `wire_is_idempotent`
+- `wire_rejects_multi_hop_cycle` (PR #18 audit regression — 2-hop)
+- `wire_rejects_three_hop_cycle` (PR #18 audit regression — 3-hop)
 - `save_then_load_round_trips_the_wiring_document`
 - `load_bindings_rejects_self_wires`
+- `load_bindings_rejects_multi_hop_cycle` (PR #18 audit regression)
 - `bindings_document_round_trips_json`
 
 ### Step M9.2 — Surface invariants by inspection

@@ -150,6 +150,19 @@ publish` deferred to TASK-014 (planned, blocked on M8 —
 `AppManifest`). The §5.8 spec checkboxes for those rows stay
 unticked with an inline pointer.
 
+### Fixed — Post-M6-M9 audit (PR #18 review pass, round 6)
+
+- `docs/manual-validation-m6-m9.md` Step M8.1 expected `6 / 6` →
+  `8 / 8` (covers the two structural-equality regressions); Step
+  M9.1 expected `9 / 9` → `12 / 12` with the three cycle-rejection
+  test names appended; the §M9 intro `9 inline tests` → `12 inline
+  tests`. These were the only doc-staleness pockets the prior
+  rounds' propagation sweep missed.
+- `sdk/liquid_sdk/lib/src/runtime_apis.dart` doc comments: stale
+  bare task-id references replaced with `TASK-016b` (the Dart-side
+  slot emitter / consumer wiring belongs to that task, alongside
+  TASK-012 for the bridge codegen).
+
 ### Fixed — Post-M6-M9 audit (PR #18 review pass, round 5)
 
 - Bats-test count corrections that round 4 missed:

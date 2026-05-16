@@ -1,7 +1,9 @@
 /// Runtime APIs the host injects into every component at mount
 /// time. Phase-2 ships the abstract classes; the concrete
 /// `flutter_rust_bridge`-backed implementations land with
-/// TASK-012 (M5 Dart side) and TASK-016 (M9 Dart side).
+/// TASK-012 (M5 Dart side — FFI codegen + concrete `GridApi`
+/// / `VcsApi` / `PermissionApi`) and TASK-016b (M9 Dart side —
+/// slot emitter / consumer wired through the broker).
 library;
 
 import 'dart:async';
@@ -77,8 +79,8 @@ abstract class PermissionApi {
 
 /// Live publish/subscribe handle for an [OutputSlot]. Phase-2
 /// abstract; the concrete impl wraps the bridge's
-/// `publish_slot` / `subscribe_slot` FFI (TASK-016 — M9 Dart
-/// side).
+/// `publish_slot` / `subscribe_slot` FFI (TASK-016b — M9 Dart
+/// side, blocked on TASK-012 codegen).
 abstract class SlotEmitter {
   Future<int> emit(SlotValue value);
 }
