@@ -3,6 +3,17 @@
 //! Exercises the M3 plan-level success criterion (`IMPLEMENTATION_PLAN.md` §5.3):
 //! an `AppViewer` agent cannot write, an `AppEditor` agent can, and a
 //! `WorkspaceOwner` user can do both.
+//!
+//! Note on the cross-workspace UUID tests at the bottom of this file:
+//! they *characterise* the §4.2 globally-unique-UUID tenant-isolation
+//! assumption — they cannot enforce it from within `liquid-permissions`,
+//! because `PermissionIndex::check` deliberately takes no
+//! `WorkspaceId` for non-`Resource::Workspace` resources and because
+//! `AppInstanceId::new` (which generates the actually-unique UUIDs)
+//! lives in `liquid-core`. The tests therefore pin the *contract* —
+//! a future refactor that adds workspace-strict checking for
+//! `AppInstance` will break the second test, and §4.2 has to move
+//! with it.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 

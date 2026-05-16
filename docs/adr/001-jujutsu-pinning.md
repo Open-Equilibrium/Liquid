@@ -44,6 +44,13 @@ Both implementations sit behind the same `ContentStore` trait
 [`IMPLEMENTATION_PLAN.md §15`](../../IMPLEMENTATION_PLAN.md#15-key-design-decisions)),
 so application code does not change when we swap.
 
+> **Note on ADR numbering.** ADR-001 / ADR-002 / ADR-003 are tactical
+> ADRs that live as standalone files in `docs/adr/` (this file is
+> ADR-001). ADR-004 / ADR-005 / ADR-006 / ADR-007 / ADR-008 are
+> *strategic* ADRs that live inline in `IMPLEMENTATION_PLAN.md §15`
+> only — there is no `docs/adr/005-*.md` to chase. The §15 prefix
+> documents this dual numbering convention.
+
 ## Rationale
 
 **The trait abstraction is the load-bearing decision, not the engine.** ADR-005

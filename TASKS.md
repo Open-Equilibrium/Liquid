@@ -158,9 +158,11 @@ moved into `Binding::matches()` so both backends share one definition.
 **Acceptance criteria.**
 - [x] `cargo test -p liquid-permissions` is green (14 in-memory unit
       + 9 filesystem integration + 4 filesystem-corners coverage +
-      1 M3 end-to-end = 28 tests; the +2 in-memory tests pin the
-      §4.2 globally-unique-UUID tenant-isolation assumption; the +4
-      filesystem-corners tests cover open-time error paths)
+      1 M3 end-to-end = 28 tests; the +2 in-memory tests
+      *characterise* the §4.2 globally-unique-UUID tenant-isolation
+      assumption — actual enforcement is `Uuid::new_v4()` in
+      `AppInstanceId::new`; the +4 filesystem-corners tests cover
+      open-time error paths)
 - [x] `cargo fmt --check` and
       `cargo clippy --workspace --all-targets --locked -- -D warnings`
       clean
@@ -186,8 +188,10 @@ the `require_permission!` macro that gates every bridge / CLI callsite.
 **Acceptance criteria.**
 - [x] `cargo test -p liquid-permissions` is green (14 unit tests + the
       M3 plan-level end-to-end test that wires `liquid-auth` into the
-      flow; the +2 unit tests pin the §4.2 globally-unique-UUID
-      tenant-isolation assumption)
+      flow; the +2 unit tests *characterise* the §4.2 globally-unique-
+      UUID tenant-isolation assumption — the actual enforcement lives
+      in `AppInstanceId::new` calling `Uuid::new_v4`, which no in-
+      crate test can falsify)
 - [x] `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings`
       clean
 - [x] No `unwrap()`/`expect()` outside `#[cfg(test)]`
