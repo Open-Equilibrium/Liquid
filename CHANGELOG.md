@@ -18,6 +18,23 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Added — Manual validation guide for M4 + M5
+
+- `docs/manual-validation-m4-m5.md` (new) — auditable companion to
+  `manual-validation-m1-m3.md`. Covers the second half of Phase 1:
+  M4 (cache layer — `ReadCache` + `InProcessCache` +
+  `CachedContentStore`) with step-by-step focused-test, walkthrough,
+  invariant-by-inspection, and lints procedures; M5 (FFI bridge,
+  currently PENDING) as a PR-review checklist the next reviewer
+  follows when M5 lands.
+- `core/liquid-vcs/examples/m4_walkthrough.rs` (new) — runnable,
+  self-asserting reproduction of the M4 plan-level success criterion
+  against a real `FilesystemContentStore`. Five phases: cache hit on
+  second read, write invalidates prior hash (no stale hit),
+  per-workspace tenancy isolation, undo invalidates workspace cache,
+  and re-warm. Mirrors the per-milestone style of `m2_walkthrough` /
+  `m3_walkthrough`.
+
 ### Fixed — M4 codecov
 
 - `CachedContentStore`: replaced `self.index.lock().map_err(|_|

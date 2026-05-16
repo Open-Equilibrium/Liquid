@@ -411,20 +411,24 @@ write via CLI. No app marketplace, no extensions, no multi-workspace UI.
 
 ### 5.1 Milestone 1 — Rust workspace bootstrap (week 1–2)
 
-- [ ] Create `core/Cargo.toml` workspace manifest listing all crates
-- [ ] Scaffold each crate with `lib.rs`, stub types, and `#[cfg(test)]` module
-- [ ] Implement `liquid-core` fully:
-  - `WorkspaceId`, `AppInstanceId`, `TenantConfig`, `ComponentId`
+- [x] Create `core/Cargo.toml` workspace manifest listing all crates
+- [x] Scaffold each crate with `lib.rs`, stub types, and `#[cfg(test)]` module
+- [x] Implement `liquid-core` fully:
+  - `WorkspaceId`, `AppInstanceId`, `TenantConfig`, `ComponentId`, `PageId`,
+    `OperationId`, `CommitId`, `RoleId`
   - `PrincipalId` (wraps a UUID; distinguishes User / Agent via enum variant)
-  - `ContentHash` (SHA-256 newtype)
-  - `SlotName`, `SlotValue` (typed enum: `String | Number | Bool | Json | Bytes`)
+  - `ContentHash` (SHA-256 newtype) — `ContentHash::of_bytes` helper
+    added in M4 so the SHA-256 dependency stays in one crate
+  - `SlotName`, `SlotValue` (typed enum: `Str | Num | Bool | Json | Bytes`)
   - `StorePath` (validated UTF-8 path, workspace-relative, no `..`)
   - `Action` enum: `Read | Write | Delete | Admin`
   - `Resource` enum: `Workspace | AppInstance | Component | Page | Field`
   - `LiquidError` top-level error type re-exported by all crates
-- [ ] Write unit tests for all ID types (construction, serialisation, equality)
+- [x] Write unit tests for all ID types (construction, serialisation, equality)
 
-**Success criterion:** `cargo test -p liquid-core` passes with ≥ 90% line coverage.
+**Success criterion:** `cargo test -p liquid-core` passes with ≥ 90% line
+coverage. Manual validation:
+[`docs/manual-validation-m1-m3.md`](docs/manual-validation-m1-m3.md) §M1.
 
 ---
 
@@ -551,7 +555,10 @@ two successive reads). Seven cache-wiring tests plus eight
 `InProcessCache`-trait tests cover read-warm, write-invalidate,
 undo-invalidate, miss-non-poisoning, content-addressable dedup
 across paths, and per-workspace tenancy isolation of the path→hash
-index.
+index. Manual validation:
+[`docs/manual-validation-m4-m5.md`](docs/manual-validation-m4-m5.md)
+plus the runnable example at
+`core/liquid-vcs/examples/m4_walkthrough.rs`.
 
 ---
 
@@ -575,7 +582,11 @@ index.
 - [ ] Write a Dart integration test that calls each function end-to-end
 
 **Success criterion:** Dart test creates a workspace, writes a page, reads it
-back, and the round-trip data matches.
+back, and the round-trip data matches. Manual validation +
+PR-review checklist:
+[`docs/manual-validation-m4-m5.md`](docs/manual-validation-m4-m5.md)
+§M5 (the section is marked PENDING and doubles as the M5-PR
+acceptance checklist until M5 lands).
 
 ---
 
