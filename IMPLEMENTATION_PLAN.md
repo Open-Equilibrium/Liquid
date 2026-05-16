@@ -1446,15 +1446,22 @@ Use **Riverpod** throughout. Rules:
 
 ### Folder conventions
 
-| Folder | Contains |
-|---|---|
-| `shell/` | `RootShell`, `WorkspaceSwitcher`, top-level layout |
-| `explorer/` | `ExplorerPanel`, `PageTreeView`, `AppInstanceListView`, `TagSectionView` |
-| `grid/` | `PageGrid`, `GridItem`, `GridResizeHandle`, `GridDropTarget` |
-| `pages/` | `PageView`, `PageToolbar`, page model DTOs |
-| `bindings/` | `SlotWiringOverlay`, slot badge widgets, `BindingEditorSheet` |
-| `state/` | All Riverpod providers and notifiers |
-| `bridge/` | Generated FFI bindings — do not touch |
+Phase-2 (M6) ships a deliberately flat `app/lib/src/` until the file
+count justifies a split (see §2). The table below is the **target
+layout** that lands once each area accumulates enough surface to
+warrant its own directory — at that point the flat-src files split
+out incrementally and this table becomes the authoritative reference.
+
+| Folder | Contains | Status (M6) |
+|---|---|---|
+| `src/` (flat) | `root_shell.dart`, `explorer_panel.dart`, `page_area.dart`, `page_grid.dart`, `state.dart` | **shipped** |
+| `shell/` | `RootShell`, `WorkspaceSwitcher`, top-level layout | planned (split from `src/`) |
+| `explorer/` | `ExplorerPanel`, `PageTreeView`, `AppInstanceListView`, `TagSectionView` | planned (split from `src/`) |
+| `grid/` | `PageGrid`, `GridItem`, `GridResizeHandle`, `GridDropTarget` | planned (split from `src/`) |
+| `pages/` | `PageView`, `PageToolbar`, page model DTOs | planned (lands with first-party apps in M11) |
+| `bindings/` | `SlotWiringOverlay`, slot badge widgets, `BindingEditorSheet` | planned (TASK-016b — M9 wiring UI) |
+| `state/` | All Riverpod providers and notifiers | planned (split from `src/state.dart`) |
+| `bridge/` | Generated FFI bindings — do not touch | planned (TASK-012 — flutter_rust_bridge codegen) |
 
 ### Widget naming conventions
 

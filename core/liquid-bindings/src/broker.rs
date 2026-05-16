@@ -421,6 +421,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn wire_rejects_three_hop_cycle() {
+        // A → B → C → A — exercises the multi-intermediate-node
+        // traversal in `would_form_cycle` that the 2-hop test
+        // cannot reach (DFS depth = 1).
+        let b = InProcessSlotBroker::new();
+        b.wire(SlotWiring {
+            from: slot("a:out"),
+            to: slot("b:in"),
+        })
+        .await
+        .expect("a→b ok");
+        b.wire(SlotWiring {
+            from: slot("b:in"),
+            to: slot("c:in"),
+        })
+        .await
+        .expect("b→c ok");
+        let err = b
+            .wire(SlotWiring {
+                from: slot("c:in"),
+                to: slot("a:out"),
+            })
+            .await
+            .expect_err("c→a would close a 3-hop cycle");
+        assert!(matches!(err, LiquidError::InvalidInput(_)));
+        let doc = b.save_bindings().await.expect("save");
+        assert_eq!(
+            doc.wires.len(),
+            2,
+            "the two acyclic legs survive; the cycle-closer is rejected"
+        );
+    }
+
+    #[tokio::test]
     async fn load_bindings_rejects_multi_hop_cycle() {
         let b = InProcessSlotBroker::new();
         let bad = BindingsDocument {

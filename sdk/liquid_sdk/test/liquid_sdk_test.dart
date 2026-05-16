@@ -1,4 +1,6 @@
 // ignore_for_file: dangling_library_doc_comments
+// ignore_for_file: prefer_const_constructors
+// ignore_for_file: prefer_const_literals_to_create_immutables
 /// M8 plan-level success criterion
 /// (`IMPLEMENTATION_PLAN.md §6.1`):
 ///
@@ -94,18 +96,28 @@ void main() {
     });
 
     test('json equality is structural, not identity', () {
-      const a = SlotValue.json(<String, Object>{
+      // Use runtime (`final`) maps + lists — `const` literals would
+      // be canonicalised by Dart to the same instance, so the
+      // pre-fix identity-based operator== would have wrongly passed.
+      // Building fresh `Map` / `List` objects forces the deep-equality
+      // path that DeepCollectionEquality is meant to handle. The
+      // `identical(a, b)` assertion below is the explicit guard
+      // against the test regressing back into the canonicalised form.
+      final a = SlotValue.json(<String, Object>{
         'k': 1,
         'nested': <int>[1, 2, 3],
       });
-      const b = SlotValue.json(<String, Object>{
+      final b = SlotValue.json(<String, Object>{
         'k': 1,
         'nested': <int>[1, 2, 3],
       });
-      const c = SlotValue.json(<String, Object>{
+      final c = SlotValue.json(<String, Object>{
         'k': 1,
         'nested': <int>[1, 2, 4],
       });
+      expect(identical(a, b), isFalse,
+          reason: 'sanity: a and b must be distinct objects so the '
+              'test exercises structural equality, not identity');
       expect(a, b,
           reason: 'two json values with deep-equal content must be ==');
       expect(a.hashCode, b.hashCode, reason: 'hashCode must agree with ==');
@@ -113,9 +125,12 @@ void main() {
     });
 
     test('bytes equality is structural', () {
-      const a = SlotValue.bytes(<int>[1, 2, 3]);
-      const b = SlotValue.bytes(<int>[1, 2, 3]);
-      const c = SlotValue.bytes(<int>[1, 2, 4]);
+      // Same canonicalisation hazard as above — use `final` so each
+      // call site produces a fresh `_Bytes` instance.
+      final a = SlotValue.bytes(<int>[1, 2, 3]);
+      final b = SlotValue.bytes(<int>[1, 2, 3]);
+      final c = SlotValue.bytes(<int>[1, 2, 4]);
+      expect(identical(a, b), isFalse);
       expect(a, b);
       expect(a == c, isFalse);
     });

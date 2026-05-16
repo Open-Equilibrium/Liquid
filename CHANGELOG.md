@@ -144,6 +144,25 @@ publish` deferred to TASK-014 (planned, blocked on M8 —
 `AppManifest`). The §5.8 spec checkboxes for those rows stay
 unticked with an inline pointer.
 
+### Fixed — PR #18 CI green-lighting (sync-docs + dart-format + scaffolded-platform matrix)
+
+- `scripts/sync-docs-check.sh`: extended the milestone-evidence
+  grep to accept Phase-2 `### 6.N Milestone` headings in addition
+  to the Phase-1 `### 5.N` form. The previous gate only looked in
+  §5 and falsely flagged M8 + M9 as undocumented even though
+  `IMPLEMENTATION_PLAN.md §6` covers them.
+- `sdk/liquid_sdk/lib/src/runtime_apis.dart`,
+  `app/lib/src/page_area.dart`, `app/lib/src/page_grid.dart`,
+  `app/test/widget_test.dart`: applied `dart format` so the
+  `--set-exit-if-changed` step on both CI jobs passes. Pure
+  whitespace shifts; no behaviour change.
+- `.github/workflows/ci.yml`: shrunk the `Flutter app` matrix to
+  `linux` — M6's success criterion is "App launches on Linux"
+  (`IMPLEMENTATION_PLAN.md §5.7`) and this branch ships no
+  scaffolding under `app/{android,ios,macos,windows}`. TASK-018
+  tracks the multi-platform re-expansion when the missing
+  scaffolding lands.
+
 ### Fixed — Post-M6-M9 audit (PR #18 review pass)
 
 - `sdk/liquid_sdk/lib/src/slot.dart`: `SlotValue.json` equality is
@@ -152,14 +171,17 @@ unticked with an inline pointer.
   with deep-equal `Map` / `List` contents compared unequal, which
   would have silently broken any caller using them as map keys, in
   `Set` membership, or in equality-based cache lookups. Test coverage
-  added for both `json` and `bytes` structural equality.
+  added for both `json` and `bytes` structural equality, using
+  runtime (`final`) literals + `identical(a, b) == false` guard so
+  Dart's const canonicalisation cannot mask a regression of the bug.
 - `core/liquid-bindings/src/broker.rs`: `Mutex` poison now propagates
   via `LiquidError::InvalidInput` (matches `liquid-auth`,
   `liquid-permissions`, and `liquid-vcs`) instead of silently
   continuing with poisoned state. Added multi-hop cycle detection to
-  `wire` + `load_bindings`: A→B + B→A and equivalent multi-hop
-  topologies now return `InvalidInput`, so the upcoming wiring UI
-  cannot persist a graph that closes a cycle.
+  `wire` + `load_bindings`: A→B + B→A, A→B→C→A, and equivalent
+  multi-hop topologies now return `InvalidInput`, so the upcoming
+  wiring UI cannot persist a graph that closes a cycle. Three
+  dedicated cycle tests (2-hop wire, 3-hop wire, multi-hop document).
 - `core/liquid-cli/src/cmd/page.rs`: `page history --limit N` is now
   a per-path cap (N matching writes) rather than a prefix cap on the
   op log. The previous behaviour silently under-returned matches when
@@ -179,12 +201,11 @@ unticked with an inline pointer.
 - `app/lib/src/page_grid.dart`: replaced deprecated `Color.withOpacity`
   with `withAlpha`, preventing an analyzer warning once the Flutter
   SDK rolls past 3.27.
-- `.github/workflows/ci.yml`: the `Flutter app` matrix is shrunk to
-  `linux` — M6's success criterion is "App launches on Linux" and
-  this branch ships no scaffolding under `app/{android,ios,macos,
-  windows}`. TASK-018 tracks the re-expansion. `dart format`
-  failures and an `IMPLEMENTATION_PLAN.md §6`-aware `sync-docs`
-  fix complete the CI green-lighting.
+- `IMPLEMENTATION_PLAN.md §10 'Folder conventions'`: marked every
+  planned subdirectory (`shell/`, `explorer/`, `grid/`, `pages/`,
+  `bindings/`, `state/`, `bridge/`) as future-state and recorded the
+  flat `app/lib/src/` shipped in M6 as the current layout. Removes
+  the contradiction between §2's flat tree and §10's subdir table.
 
 ### Fixed — codecov patch coverage on M6.5 (TASK-008 follow-up)
 
