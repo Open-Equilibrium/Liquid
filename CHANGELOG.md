@@ -20,6 +20,26 @@ moved into a real version section when a release is cut.
 
 ### Fixed
 
+- `.claude/scripts/gh-job-log`:
+  - Per-step bucketing now handles the `gh run view --log-failed`
+    tab-separated format (`TIMESTAMP\tJOB\tSTEP\tLINE`) in addition
+    to the raw zip's `##[group]` markers. The original parser was
+    a no-op on the gh path; the "last 50 lines per failed step"
+    cap is now honoured on both code paths.
+  - Step files in the run-log zip are now concatenated in
+    chronological order via `sort -zV` (version-sort) instead of
+    lexicographic `sort -z` — jobs with 10+ steps used to read
+    `step 10` before `step 2`.
+  - Tempfile / unzip-dir cleanup is now governed by a `RETURN`
+    trap so an `xargs cat` failure no longer leaks the zip in
+    `/tmp/`.
+  - `run_id` and `job_id` arguments are validated as positive
+    integers (rejected at exit 2 if malformed), closing the
+    path-traversal class on the log filename composition.
+  - 7 bats cases in `tests/cli/05_gh_job_log.bats` cover the
+    network-free paths: arity / input-validation, raw-mode
+    bucketing, gh-mode bucketing, 200-line total cap.
+
 - `justfile` (`lint-rust`, `lint-rust-filtered`, `fmt-rust`) and
   `lefthook.yml` (`rust-fmt`): pass `--all` to `cargo fmt` when
   `--manifest-path` is set. rustfmt 1.8+ errors with "Failed to

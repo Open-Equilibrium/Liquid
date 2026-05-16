@@ -45,6 +45,25 @@ EOF
 run_id="$1"
 job_id="${2:-}"
 
+# GitHub run / job IDs are positive integers. Validating here keeps the
+# value safe to interpolate into the log filename below (no
+# path-traversal class) and gives the user a clear error rather than a
+# confusing 404 from the API.
+case "$run_id" in
+  ''|*[!0-9]*)
+    printf 'gh-job-log: run_id must be a positive integer (got %q)\n' "$run_id" >&2
+    exit 2
+    ;;
+esac
+if [ -n "$job_id" ]; then
+  case "$job_id" in
+    ''|*[!0-9]*)
+      printf 'gh-job-log: job_id must be a positive integer (got %q)\n' "$job_id" >&2
+      exit 2
+      ;;
+  esac
+fi
+
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 log_dir="$repo_root/.ai/artifacts/logs"
 mkdir -p "$log_dir"
@@ -52,29 +71,48 @@ ts=$(date -u +%Y%m%dT%H%M%SZ)
 raw_log="$log_dir/gh-job-${run_id}-${ts}.log"
 
 print_tail_per_failed_step() {
-  # The fallback parser scans for "##[error]" markers and prints the
-  # last 50 lines of each group. The `gh run view --log-failed` output
-  # already brackets failed steps; we still cap each block at 50 lines
-  # so a runaway log cannot drown the chat.
-  awk '
-    /^##\[group\]/   { in_group = 1; lines = ""; n = 0; header = $0; next }
-    /^##\[endgroup\]/{
-      if (failed_in_group) {
-        print header
-        # Trim to last 50 lines
+  # GitHub's raw runner logs use `##[group]` / `##[endgroup]` markers;
+  # `gh run view --log-failed` uses tab-separated `TIMESTAMP\tJOB\tSTEP\tLINE`.
+  # We support both:
+  #   - raw zip path: parse group markers, emit only failed groups
+  #     trimmed to their last 50 lines.
+  #   - gh tab-separated path: bucket by `JOB\tSTEP` boundary, emit
+  #     only buckets that carry a failure marker, trimmed to 50 lines.
+  # In either case the total output is capped at 200 lines so a
+  # pathological log cannot drown the chat.
+  awk -F '\t' '
+    function flush_bucket() {
+      if (failed_in_bucket) {
+        if (header != "") print header
         start = n - 50; if (start < 1) start = 1
         for (i = start; i <= n; i++) print buf[i]
-        print "##[endgroup]"
+        if (header != "") print "##[endgroup]"
       }
-      in_group = 0; failed_in_group = 0; n = 0; delete buf; next
+      delete buf; n = 0; failed_in_bucket = 0; header = ""
     }
-    {
+    # Detect format on first line.
+    NR == 1 {
+      if ($0 ~ /^##\[group\]/) { mode = "raw" } else if (NF >= 4) { mode = "gh" } else { mode = "raw" }
+    }
+    # ── raw zip / group-marker mode ────────────────────────────────
+    mode == "raw" && /^##\[group\]/   { flush_bucket(); in_group = 1; header = $0; next }
+    mode == "raw" && /^##\[endgroup\]/{ flush_bucket(); in_group = 0; next }
+    mode == "raw" {
       if (in_group) { n++; buf[n] = $0 }
       else          { print $0 }
-      if ($0 ~ /##\[error\]|error\[/ || $0 ~ /FAILED|failure|panicked/) {
-        failed_in_group = 1
-      }
+      if ($0 ~ /##\[error\]|error\[E?[0-9]*\]|FAILED|failure|panicked/) failed_in_bucket = 1
+      next
     }
+    # ── gh CLI tab-separated mode ──────────────────────────────────
+    mode == "gh" {
+      key = $2 "\t" $3
+      if (key != prev_key && prev_key != "") flush_bucket()
+      prev_key = key
+      header = "##[step] " $2 " / " $3
+      n++; buf[n] = $0
+      if ($0 ~ /##\[error\]|error\[E?[0-9]*\]|FAILED|failure|panicked/) failed_in_bucket = 1
+    }
+    END { flush_bucket() }
   ' "$1" | tail -n 200
 }
 
@@ -102,8 +140,12 @@ fetch_with_curl() {
   fi
   # The GitHub API returns a 302 to a signed S3 URL; -L follows it.
   # The body is a zip when fetching the whole run, plain text per job.
-  local tmp
+  local tmp zipdir=""
   tmp=$(mktemp)
+  # Belt-and-braces cleanup: trap fires whether the function returns
+  # normally or aborts under `set -e`. Replaces the previous tail-end
+  # `rm -f` which leaked $tmp on every error path.
+  trap 'rm -rf "$tmp" "$zipdir"' RETURN
   local http_code
   http_code=$(
     curl -sSL \
@@ -116,28 +158,25 @@ fetch_with_curl() {
   )
   if [ "$http_code" != "200" ]; then
     printf 'gh-job-log: GitHub API returned HTTP %s for %s\n' "$http_code" "$url" >&2
-    rm -f "$tmp"
     return 3
   fi
   # If it's a zip (whole run), extract; if plain text (single job), cat.
   if [ "$(head -c4 "$tmp" | od -An -c | tr -d ' ')" = "PK003004" ]; then
-    local zipdir
     zipdir=$(mktemp -d)
     if ! unzip -q "$tmp" -d "$zipdir" 2>/dev/null; then
       printf 'gh-job-log: failed to unzip API response (is `unzip` installed?)\n' >&2
-      rm -rf "$tmp" "$zipdir"
       return 3
     fi
-    # Concatenate every step log; preserves group markers if the
-    # runner used them.
+    # Concatenate every step log preserving chronological order.
+    # GitHub names files `<n>_<step>.txt` where <n> starts at 1; a
+    # plain `sort` would put 10_ before 2_. `sort -V` (version-sort)
+    # treats the numeric prefix correctly on both GNU and BSD coreutils.
     find "$zipdir" -type f -name '*.txt' -print0 \
-      | sort -z \
+      | sort -zV \
       | xargs -0 cat
-    rm -rf "$zipdir"
   else
     cat "$tmp"
   fi
-  rm -f "$tmp"
 }
 
 main() {
