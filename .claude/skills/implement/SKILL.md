@@ -42,10 +42,17 @@ Then execute every step below in order.
   ```
   Raw logs land in `.ai/artifacts/logs/`; only a compact summary reaches the
   main thread.
-- Delegate noisy investigation to subagents:
+- Delegate noisy investigation to subagents — see
+  [`.claude/rules/subagent-routing.md`](../../rules/subagent-routing.md)
+  for the full decision table:
   - `test-triager` for cargo/flutter/bats/analyzer log analysis.
   - `ui-validator` for Flutter widget/integration/golden validation.
   - `code-reviewer` for diff review (Step 6).
+  - `github-pr` for every `mcp__github__*` READ call (PRs, issues,
+    branches, CI status); `mcp__github__*` writes stay in the main
+    agent.
+  - `Explore` for open-ended "where is X / which files reference Y"
+    searches that span >3 grep candidates.
 - Save large artifacts (screenshots, golden diffs, traces) under
   `.ai/artifacts/{logs,ui,diffs}/`. Never paste them into chat.
 - Run the **narrowest** test first; escalate only after focused tests pass.
