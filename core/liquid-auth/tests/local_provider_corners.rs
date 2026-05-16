@@ -111,3 +111,71 @@ async fn with_token_lifetime_makes_tokens_expire_immediately() {
         "expected Forbidden, got {err:?}"
     );
 }
+
+#[tokio::test]
+async fn find_agents_by_name_returns_zero_one_or_many() {
+    use liquid_core::WorkspaceId;
+    let dir = TempDir::new().expect("tempdir");
+    let p = LocalIdentityProvider::new(dir.path(), SECRET).expect("provider");
+    let alice = p.register_user("alice", "pw").await.expect("register");
+    let ws_a = WorkspaceId::new();
+    let ws_b = WorkspaceId::new();
+    let _bot_a = p
+        .provision_agent(ws_a, alice, "worker")
+        .await
+        .expect("bot a");
+    let _bot_b = p
+        .provision_agent(ws_b, alice, "worker")
+        .await
+        .expect("bot b");
+
+    // 0 matches
+    let none = p.find_agents_by_name("missing-bot").await.expect("find");
+    assert!(none.is_empty());
+
+    // 2 matches (same name across two workspaces)
+    let many = p.find_agents_by_name("worker").await.expect("find");
+    assert_eq!(many.len(), 2);
+    let mut workspaces: Vec<_> = many.iter().map(|a| a.workspace).collect();
+    workspaces.sort();
+    let mut expected = vec![ws_a, ws_b];
+    expected.sort();
+    assert_eq!(workspaces, expected);
+}
+
+#[tokio::test]
+async fn find_agent_by_principal_returns_summary_or_notfound() {
+    use liquid_auth::AgentSummary;
+    use liquid_core::{LiquidError, WorkspaceId};
+    let dir = TempDir::new().expect("tempdir");
+    let p = LocalIdentityProvider::new(dir.path(), SECRET).expect("provider");
+    let alice = p.register_user("alice", "pw").await.expect("register");
+    let ws = WorkspaceId::new();
+    let bot = p
+        .provision_agent(ws, alice, "worker")
+        .await
+        .expect("provision");
+
+    let summary: AgentSummary = p
+        .find_agent_by_principal(bot)
+        .await
+        .expect("find existing");
+    assert_eq!(summary.principal, bot);
+    assert_eq!(summary.workspace, ws);
+    assert_eq!(summary.name, "worker");
+
+    // Unknown agent id surfaces NotFound.
+    let bogus = liquid_core::PrincipalId::new_agent();
+    let err = p
+        .find_agent_by_principal(bogus)
+        .await
+        .expect_err("must not find");
+    assert!(matches!(err, LiquidError::NotFound(_)));
+
+    // User principal is rejected as InvalidInput.
+    let err = p
+        .find_agent_by_principal(alice)
+        .await
+        .expect_err("must reject user");
+    assert!(matches!(err, LiquidError::InvalidInput(_)));
+}

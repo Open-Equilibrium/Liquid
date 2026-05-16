@@ -119,6 +119,31 @@ where
         Ok(id)
     }
 
+    /// Delete `workspace` from the registry. Requires
+    /// `Action::Admin` on the workspace — `WorkspaceOwner` /
+    /// `WorkspaceMember`-with-Admin satisfy. Returns
+    /// `LiquidError::NotFound` if the workspace was never
+    /// registered (or has already been deleted).
+    ///
+    /// Phase-1 limitation: the call does NOT cascade-delete the
+    /// VCS bytes under `vcs/<workspace_id>/` — those remain on
+    /// disk for forensics until a future M7+ flag adds cascade
+    /// cleanup. Role bindings become orphans pointing at a
+    /// no-longer-listed workspace; `list_workspaces` filters them
+    /// out automatically because the registry is the source of
+    /// truth.
+    pub async fn delete_workspace(&self, token: &str, workspace: WorkspaceId) -> Result<()> {
+        let principal = self.identity.validate_token(token).await?;
+        let perms = self.permissions.as_ref();
+        require_permission!(
+            perms,
+            principal,
+            Action::Admin,
+            Resource::Workspace(workspace)
+        );
+        self.registry.delete(workspace).await
+    }
+
     /// Every workspace the authenticated caller has at least Read
     /// authority over. Order: newest-first by `created_unix`
     /// (`WorkspaceRegistry::list` sorts already).

@@ -29,7 +29,7 @@ SDK, and reference apps land in subsequent phases.
 | **M5** FFI bridge | `BridgeServices<S,P,I,R>` + 5 token-gated FFI methods + `WorkspaceRegistry` + `PageSnapshot` / `WorkspaceSummary` wire types | ✅ Rust side done (TASK-011); Dart-side codegen + `flutter test` pending TASK-012 (blocked on M6 scaffolding `app/` + `sdk/liquid_sdk/`) |
 | **M6.5** Minimal agent CLI (gates M6 per CLAUDE.md rule 6) | `liquid workspace create`, `page read/write/undo`, `auth provision-agent/token`, `audit list` — drives the MVP slice (`tests/cli/00_mvp_slice.bats`) plus focused subcommand coverage (`tests/cli/10_cli_subcommands.bats`) | ✅ Done (TASK-008) |
 | **M6** Flutter shell skeleton | `RootShell`, `ExplorerPanel`, `PageGrid` | Planned |
-| **M7** Full agent CLI | Rest of [§12](IMPLEMENTATION_PLAN.md#12-agent-cli-specification): `workspace list/delete`, `page history`, `auth login/whoami`, `app …` | Planned |
+| **M7** Full agent CLI | Rest of [§12](IMPLEMENTATION_PLAN.md#12-agent-cli-specification): `workspace list/delete`, `page history`, `auth login/whoami`, `--as` impersonation. `app …` subset deferred to TASK-014 (needs M8 `AppManifest`). | ✅ Done (TASK-009 shipped; TASK-014 for `app …`) |
 | Phases 2–4 | SDK, first-party apps, mobile, scale, ecosystem | See [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) |
 
 The full milestone breakdown lives in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md);

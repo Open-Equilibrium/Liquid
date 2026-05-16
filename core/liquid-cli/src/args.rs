@@ -26,6 +26,17 @@ pub struct Cli {
     #[arg(long, value_enum, global = true, env = "LIQUID_FORMAT")]
     pub format: Option<Format>,
 
+    /// Impersonate a named agent or principal id for this call.
+    /// Accepts a bare agent name (`"worker-bot"`) — must match
+    /// exactly one provisioned agent across the host — OR a
+    /// principal-form string (`"a:<uuid>"` / `"u:<uuid>"`). The
+    /// caller still authenticates with their own token; the
+    /// bridge then issues a short-lived impersonation token for
+    /// the target principal after verifying the caller holds
+    /// `Action::Admin` on the target's workspace (M7 / §5.8).
+    #[arg(long = "as", global = true)]
+    pub as_principal: Option<String>,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -62,6 +73,18 @@ pub enum WorkspaceCmd {
         /// Human-friendly workspace name.
         name: String,
     },
+    /// List workspaces the caller has at least Read authority on.
+    /// NDJSON emit when `--format json` (one workspace per line,
+    /// newest first).
+    List,
+    /// Delete the workspace with id `<id>`. Requires Admin on the
+    /// workspace (M7 / TASK-009). Does NOT cascade-delete on-disk
+    /// VCS bytes — those remain under `$LIQUID_HOME/vcs/<id>/`
+    /// for forensics.
+    Delete {
+        /// Workspace id (uuid).
+        id: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -88,6 +111,26 @@ pub enum AuthCmd {
     /// Print the current bearer token (from `$LIQUID_TOKEN` or
     /// `$LIQUID_HOME/token`).
     Token,
+    /// Non-interactive login for a username/password pair. With
+    /// `--register` first creates the user (rejects if it already
+    /// exists); without it, authenticates an existing user. On
+    /// success, writes the issued token to `$LIQUID_HOME/token`
+    /// so subsequent commands pick it up.
+    Login {
+        #[arg(long)]
+        username: String,
+        #[arg(long)]
+        password: String,
+        /// Register the user before authenticating (one-shot).
+        /// Mutually exclusive with logging in as an existing
+        /// user — pass without `--register` for the latter.
+        #[arg(long)]
+        register: bool,
+    },
+    /// Print the principal the active token resolves to (matches
+    /// the form `liquid audit list --principal` accepts:
+    /// `user:<uuid>` or `agent:<uuid>`).
+    Whoami,
 }
 
 #[derive(Debug, Subcommand)]
@@ -129,6 +172,17 @@ pub enum PageCmd {
         /// Operation id (uuid) to invert.
         #[arg(long)]
         op: String,
+    },
+    /// Print the operation-log entries that touched `<path>`,
+    /// newest-first. NDJSON emit (`--format json`) — one record
+    /// per line; pipe through `head -n 1` to get the most recent.
+    History {
+        path: String,
+        #[arg(long)]
+        workspace: String,
+        /// Maximum entries to return. Default 50.
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
     },
 }
 

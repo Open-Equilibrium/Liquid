@@ -18,6 +18,61 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Added — M7 full agent CLI (TASK-009)
+
+- `liquid workspace list` — NDJSON, newest first, filtered to
+  workspaces the caller has Read on (per-row
+  `PermissionIndex::check`).
+- `liquid workspace delete <id>` — Admin-gated via the new
+  `BridgeServices::delete_workspace` + `WorkspaceRegistry::delete`.
+  Anti-enumeration: the permission check fires before the
+  registry lookup so unknown workspaces surface as `Forbidden`
+  rather than `NotFound` (§4.5). Does NOT cascade-delete on-disk
+  VCS bytes (forensics) — same Phase-1 boundary as the M6.5
+  `workspace create` bootstrap.
+- `liquid page history <path> --workspace <id> [--limit N]` —
+  per-path operation-log view, newest-first NDJSON. Same record
+  shape as `audit list` but filtered to one `StorePath`. Flattens
+  `OperationKind::{Create,Update}` to `"Write"` (same flattening
+  rule as `audit list` so the user-visible verb is consistent).
+- `liquid auth login --username <u> --password <p> [--register]`
+  — non-interactive login. `--register` first creates the user
+  (rejects on dup); without it, `IdentityProvider::authenticate_user`
+  validates the Argon2id hash. On success writes the issued
+  token to `$LIQUID_HOME/token`. The fully interactive password
+  prompt is a planned follow-up; the scriptable shape is what
+  the bats suite needs.
+- `liquid auth whoami` — validates the active token, prints
+  `{ principal, kind }` where `kind` is `"user"` / `"agent"`.
+  Useful in shell scripts that need to assert identity before
+  mutating state.
+- Global `--as <name|principal-id>` impersonation flag.
+  Principal-form (`a:<uuid>` / `agent:<uuid>`) parses via
+  `PrincipalId::FromStr` and resolves the agent's workspace via
+  the new `LocalIdentityProvider::find_agent_by_principal`.
+  Bare-name lookups go through `find_agents_by_name`; exactly-one
+  match is required (zero → `NotFound`; multiple →
+  `InvalidInput`). The caller must hold `Action::Admin` on the
+  target's workspace OR be the target themselves;
+  `User`-principal impersonation is rejected in Phase 1.
+- `liquid_auth::AgentSummary` — public projection of the
+  pub(crate)-only `AgentRecord` so external callers (CLI's
+  `--as` resolver) can enumerate agents without re-parsing
+  `agents.toml`.
+- `WorkspaceRegistry::delete` trait method + `InMemory` and
+  `Filesystem` impls. `Filesystem` round-trips through
+  `flush_locked` so the on-disk `workspaces.toml` reflects the
+  removal atomically.
+- `tests/cli/11_m7_full_cli.bats` (new, 13 cases) covers every
+  shipped subcommand's happy path + at least one negative path
+  (Forbidden / NotFound / InvalidInput as appropriate).
+
+**Carved out:** `liquid app list / install / uninstall` +
+`liquid app <instance-name> read / write / slot subscribe / slot
+publish` deferred to TASK-014 (planned, blocked on M8 —
+`AppManifest`). The §5.8 spec checkboxes for those rows stay
+unticked with an inline pointer.
+
 ### Fixed — codecov patch coverage on M6.5 (TASK-008 follow-up)
 
 - `core/liquid-sdk-bridge/src/registry.rs`: added

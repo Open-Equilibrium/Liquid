@@ -778,18 +778,36 @@ a page, see the grid, drag the placeholder item, and resize it.
 
 The remainder of the §12 surface, layered on top of M6.5:
 
-- [ ] `liquid workspace list` (`--format json`)
-- [ ] `liquid workspace delete <id>`
-- [ ] `liquid page history <page-path>` (paginated)
-- [ ] `liquid auth login` (interactive; writes `~/.liquid/token`)
-- [ ] `liquid auth whoami`
-- [ ] `liquid app list / install / uninstall`
+- [x] `liquid workspace list` (`--format json`) — NDJSON, newest
+      first, filtered to workspaces the caller has Read on.
+- [x] `liquid workspace delete <id>` — Admin-gated; the
+      registry-strict Admin check fires before the registry lookup
+      so unknown ids surface as `Forbidden` (anti-enumeration —
+      §4.5).
+- [x] `liquid page history <page-path>` (paginated via `--limit`).
+- [x] `liquid auth login --username <u> --password <p> [--register]`
+      — non-interactive (interactive prompt deferred to a follow-up
+      to keep the M7 surface scriptable). Persists token to
+      `$LIQUID_HOME/token`.
+- [x] `liquid auth whoami` — validates the active token and prints
+      `{ principal, kind }`.
+- [ ] `liquid app list / install / uninstall` — deferred to
+      TASK-014 (depends on M8's `AppManifest`).
 - [ ] `liquid app <instance-name> read|write|slot subscribe|slot publish`
-- [ ] `--as <agent-name>` impersonation flag (still requires matching token)
+      — deferred to TASK-014 + M9 (`SlotBroker`).
+- [x] `--as <name|principal-id>` impersonation flag —
+      principal-form accepts `a:<uuid>` / `agent:<uuid>`; bare-name
+      lookup matches across all workspaces (zero matches →
+      `NotFound`; multiple → `InvalidInput`). Caller must hold
+      `Action::Admin` on the target's workspace (or be the target);
+      `--as` for `User` principals is rejected in Phase 1.
 
-**Success criterion:** every command in §12 is reachable from the CLI;
-each one has a matching bats happy-path test under `tests/cli/`; every
-mutation runs `require_permission!` first.
+**Success criterion:** every shipped command has a matching bats
+happy-path + negative-path test under `tests/cli/11_m7_full_cli.bats`
+(13 cases). The `app …` subset that depends on M8 is tracked as
+TASK-014 (Planned). Every mutating CLI handler runs
+`require_permission!` (directly or via `BridgeServices::*`) before
+any state-touching call (Absolute Rule 4).
 
 ---
 

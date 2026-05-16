@@ -21,17 +21,18 @@ Agents: read the task carefully, check the referenced milestone in
 Jujutsu workspace via the pinned `jj-lib` version named in ADR-001. The
 trait abstraction (ADR-005) means callers won't change.
 
-### [TASK-009] Full agent CLI (M7)
+### [TASK-014] `liquid app …` subcommands (M7 follow-up, depends on M8)
 
-**Phase:** 1
-**Milestone:** M7 (IMPLEMENTATION_PLAN.md §5.8)
+**Phase:** 2
+**Milestone:** M7 (IMPLEMENTATION_PLAN.md §5.8) — `app …` subset
 **Status:** Planned
-**Blocked by:** TASK-008
+**Blocked by:** M8 — `AppManifest` + `ComponentManifest`
 
-**What.** Extend the CLI from M6.5 to cover the rest of §12: `workspace
-list/delete`, `page history`, `auth login/whoami`, `app …` subcommands,
-and the `--as` impersonation flag. Every mutation continues to run
-`require_permission!` first; every command has bats coverage.
+**What.** Implement the `app list / install / uninstall` +
+`app <instance-name> read / write / slot subscribe / slot publish`
+subcommands carved out of TASK-009. Each one needs the M8 SDK's
+`AppManifest` + (for slot subcommands) M9's `SlotBroker`. Once
+M8 ships, layer these onto the existing CLI dispatch table.
 
 ### [TASK-012] M5 Dart side — `flutter_rust_bridge` codegen + integration test
 
@@ -63,6 +64,39 @@ back → assert round-trip data + content_hash matches).
 ---
 
 ## Done tasks
+
+### [TASK-009] Full agent CLI (M7)
+
+**Phase:** 1
+**Milestone:** M7 (IMPLEMENTATION_PLAN.md §5.8)
+**Status:** Done — `app …` subset carved out to TASK-014 (Planned).
+
+**What.** Shipped the remainder of the §12 CLI surface on top of
+M6.5: `workspace list`, `workspace delete`, `page history`,
+`auth login`, `auth whoami`, and the global `--as` impersonation
+flag (accepts both bare-name lookup and principal-form ids).
+Plus `BridgeServices::delete_workspace` (gated by
+`Action::Admin`) + `WorkspaceRegistry::delete` (`InMemory` +
+`Filesystem` variants) + `LocalIdentityProvider::find_agents_by_name`
++ `find_agent_by_principal` (drives the `--as` lookup).
+
+**Acceptance criteria.**
+- [x] `bats tests/cli/11_m7_full_cli.bats` is green (13 / 13 —
+      workspace list / delete, page history, auth login / whoami,
+      --as impersonation happy + negative paths).
+- [x] Every mutating subcommand runs `require_permission!` first
+      (directly or via the bridge's
+      `delete_workspace` / `create_workspace` arms).
+- [x] No `unwrap()` / `expect()` outside `#[cfg(test)]`.
+- [x] `IMPLEMENTATION_PLAN.md §5.8` ticks every shipped checkbox;
+      the `app …` rows are left unticked with a pointer to
+      TASK-014.
+- [x] `cargo clippy --workspace --all-targets --locked -- -D
+      warnings` clean; `cargo fmt --all --check` clean.
+- [x] Workspace delete is anti-enumeration: the permission check
+      fires before the registry lookup so unknown workspaces
+      surface as `Forbidden` rather than `NotFound` (§4.5).
+
 
 ### [TASK-008] Minimal agent CLI (M6.5)
 

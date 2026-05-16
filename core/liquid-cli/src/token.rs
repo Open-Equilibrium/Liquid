@@ -103,6 +103,13 @@ pub async fn bootstrap(services: &CliServices, home: &Path) -> Result<String> {
     }
 }
 
+/// Atomically write `token` to `<home>/token`. Public so the
+/// `auth login` subcommand can persist a fresh login token
+/// after `IdentityProvider::authenticate_user` returns.
+pub fn write(home: &Path, token: &str) -> Result<()> {
+    write_token(home, token)
+}
+
 fn write_token(home: &Path, token: &str) -> Result<()> {
     atomic_write(&home.join(TOKEN_FILENAME), token.as_bytes())
 }

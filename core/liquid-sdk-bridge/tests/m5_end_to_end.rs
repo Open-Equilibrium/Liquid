@@ -421,3 +421,71 @@ async fn check_permission_rejects_malformed_subject_principal() {
         "malformed principal id must surface as InvalidInput, got {result:?}"
     );
 }
+
+#[tokio::test]
+async fn delete_workspace_happy_path_owner_drops_registry_entry() {
+    let (_d, s) = setup();
+    let alice = s
+        .identity
+        .register_user("alice", "pw")
+        .await
+        .expect("alice");
+    let token = s.identity.issue_token(alice).await.expect("token");
+    let ws = s
+        .create_workspace(&token, "demo".to_string())
+        .await
+        .expect("ws");
+    s.delete_workspace(&token, ws).await.expect("delete");
+    let listed = s.list_workspaces(&token).await.expect("list");
+    assert!(listed.is_empty(), "owner's list must be empty after delete");
+}
+
+#[tokio::test]
+async fn delete_workspace_rejects_unauthorised_caller_with_forbidden() {
+    let (_d, s) = setup();
+    let alice = s
+        .identity
+        .register_user("alice", "pw")
+        .await
+        .expect("alice");
+    let bob = s.identity.register_user("bob", "pw").await.expect("bob");
+    let alice_token = s.identity.issue_token(alice).await.expect("alice token");
+    let bob_token = s.identity.issue_token(bob).await.expect("bob token");
+    let ws = s
+        .create_workspace(&alice_token, "alice-ws".to_string())
+        .await
+        .expect("ws");
+    // Bob has no binding ⇒ Forbidden.
+    let result = s.delete_workspace(&bob_token, ws).await;
+    assert!(
+        matches!(result, Err(LiquidError::Forbidden)),
+        "non-owner must be Forbidden, got {result:?}"
+    );
+    // The workspace must still be intact.
+    let listed = s.list_workspaces(&alice_token).await.expect("list");
+    assert_eq!(listed.len(), 1);
+}
+
+#[tokio::test]
+async fn delete_workspace_unknown_id_surfaces_forbidden_not_notfound() {
+    // Anti-enumeration per §4.5 — the Admin check fires before
+    // the registry lookup, so unknown ids cannot be distinguished
+    // from "exists but inaccessible".
+    let (_d, s) = setup();
+    let alice = s
+        .identity
+        .register_user("alice", "pw")
+        .await
+        .expect("alice");
+    let token = s.identity.issue_token(alice).await.expect("token");
+    let _ = s
+        .create_workspace(&token, "demo".to_string())
+        .await
+        .expect("ws");
+    let bogus = liquid_core::WorkspaceId::new();
+    let result = s.delete_workspace(&token, bogus).await;
+    assert!(
+        matches!(result, Err(LiquidError::Forbidden)),
+        "unknown workspace must surface as Forbidden, got {result:?}"
+    );
+}
