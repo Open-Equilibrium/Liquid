@@ -90,6 +90,44 @@ from the workspace owner's password via Argon2id (never stored
 on disk). UI form generated from the app's
 `TenantConfigSchema.jsonSchema` (already declared in the M8 SDK).
 
+### [TASK-020] Align `SlotBroker` trait with `IMPLEMENTATION_PLAN.md §4.4`
+
+**Phase:** 4 (distributed backend)
+**Milestone:** M18 (`IMPLEMENTATION_PLAN.md §8` — distributed event bus)
+**Status:** Planned
+**Blocked by:** None for the trait change; the actual distributed
+implementation depends on Phase-4 networking primitives.
+
+**What.** The shipped `SlotBroker` trait in `core/liquid-bindings/`
+omits the `workspace: WorkspaceId`, `instance: AppInstanceId`,
+`subscriber: PrincipalId`, and `wired_by: PrincipalId` parameters
+that §4.4 specifies, returns `LiquidError` (not a dedicated
+`BrokerError`), and uses a tokio `broadcast::Receiver` (not a
+`BoxStream`). The flat `SlotName` keyspace is safe for the
+single-process Phase-2 backend because the CLI drives exactly one
+workspace at a time and apps namespace their slot names. It is
+**not** safe for the distributed event bus that ships in Phase-4,
+which has to route traffic across workspaces + agent processes and
+authorise every subscribe + wire against a principal.
+
+**Acceptance:**
+- Trait surface in `core/liquid-bindings/src/broker.rs` matches
+  the §4.4 target signatures exactly.
+- `InProcessSlotBroker` keys its `HashMap` by
+  `(WorkspaceId, AppInstanceId, SlotName)`.
+- Every public method calls `require_permission!(perms, principal,
+  Action::Write, Resource::AppInstance(instance))` (or the
+  appropriate analog for subscribe / wire) before touching state —
+  satisfies Absolute Rule 4.
+- Every storage call takes a `WorkspaceId` — satisfies
+  Absolute Rule 5.
+- Existing 12 broker tests get the new parameters threaded through;
+  add cross-workspace isolation tests asserting that a publish on
+  `(ws_a, instance, slot)` does **not** reach a subscriber on
+  `(ws_b, instance, slot)`.
+- Update the §4.4 "Phase-2 deviation" note to remove the deviation
+  callout once the trait surfaces match.
+
 ### [TASK-019] Implement `sdk/liquid_sdk_lint` custom-lint package
 
 **Phase:** 2

@@ -144,6 +144,35 @@ publish` deferred to TASK-014 (planned, blocked on M8 —
 `AppManifest`). The §5.8 spec checkboxes for those rows stay
 unticked with an inline pointer.
 
+### Fixed — Post-M6-M9 audit (PR #18 review pass, round 3)
+
+- `IMPLEMENTATION_PLAN.md §6.1` success-criterion count corrected
+  from "6 / 6" to "8 / 8" (two structural-equality regressions
+  landed in round 1).
+- `IMPLEMENTATION_PLAN.md §6.2` success-criterion count corrected
+  from "9 inline" to "12 inline" and the enumeration now lists every
+  cycle / self-wire / load-rejects case so the table matches the
+  CHANGELOG bullet that already says "Three dedicated cycle tests".
+- `IMPLEMENTATION_PLAN.md §4.4` now leads with a "Phase-2 deviation"
+  callout: the shipped `SlotBroker` trait in
+  `core/liquid-bindings/src/broker.rs` deliberately omits the
+  `workspace: WorkspaceId`, `instance: AppInstanceId`, and
+  `subscriber: PrincipalId` arms the target spec lists. The flat
+  `SlotName` keyspace is safe for the single-process Phase-2 backend
+  (the CLI drives one workspace at a time and apps already namespace
+  their slots); the workspace+instance+principal-aware shape lands
+  with the Phase-4 distributed backend under **TASK-020** so the
+  cross-tenant isolation contract is enforced in one place. The
+  broker module docstring + a new TASK-020 entry in `TASKS.md`
+  mirror the deviation note.
+- `sdk/liquid_sdk/test/liquid_sdk_test.dart`: narrowed the
+  `prefer_const_constructors` lint suppression from a file-wide
+  `ignore_for_file` to per-line `// ignore:` on the three runtime-
+  constructed `SlotValue.json` / `SlotValue.bytes` literals that
+  must stay non-const for the structural-equality tests to mean
+  anything. Inner `<int>[...]` literals stay `const` because they
+  do not promote the enclosing map to a const value.
+
 ### Fixed — PR #18 CI green-lighting (sync-docs + dart-format + scaffolded-platform matrix)
 
 - `scripts/sync-docs-check.sh`: extended the milestone-evidence

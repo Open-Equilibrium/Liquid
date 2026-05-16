@@ -1,12 +1,25 @@
 //! `SlotBroker` trait + `InProcessSlotBroker` Phase-2 backend.
 //!
-//! Implements `IMPLEMENTATION_PLAN.md §4.4` + §6.2. The broker is
-//! a typed pub/sub bus over [`liquid_core::SlotValue`]s, with
+//! Implements the Phase-2 narrow shape of `IMPLEMENTATION_PLAN.md
+//! §4.4` (+ the M9 success criterion in §6.2). The broker is a
+//! typed pub/sub bus over [`liquid_core::SlotValue`]s, with
 //! component-to-component wiring stored declaratively so a page
 //! reload can replay every subscription.
 //!
-//! Phase-2 ships only the in-process variant; Phase-4 (M18) adds
-//! a distributed event bus behind the same trait.
+//! **Scoping decision (TASK-020).** The trait below ships with a
+//! flat `SlotName` keyspace — no `workspace: WorkspaceId`,
+//! `instance: AppInstanceId`, or `subscriber: PrincipalId` arms,
+//! and no dedicated `BrokerError`. The §4.4 spec entry lists the
+//! target signatures and labels the Phase-2 deviation explicitly;
+//! the alignment work lands together with the Phase-4 distributed
+//! backend (M18) so cross-workspace + cross-process isolation is
+//! enforced in one place. For the single-process Phase-2 backend,
+//! the CLI drives exactly one workspace at a time and apps already
+//! namespace their slots (e.g. `sheet:selectedRange`,
+//! `chart:data`), so the flat keyspace is safe — it does *not*
+//! claim to be safe for the distributed shape, which is what
+//! TASK-020 has to fix before any cross-tenant broker traffic is
+//! ever exchanged.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};

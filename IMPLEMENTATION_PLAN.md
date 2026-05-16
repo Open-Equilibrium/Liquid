@@ -349,6 +349,26 @@ pub trait ReadCache: Send + Sync {
 
 ### 4.4 SlotBroker (`liquid-bindings`)
 
+> **Phase-2 deviation (TASK-016a / M9 — shipped):** the
+> `InProcessSlotBroker` in `core/liquid-bindings/src/broker.rs`
+> implements a *narrower* trait shape than the target-state signatures
+> below. The shipped surface omits the `workspace: WorkspaceId`,
+> `instance: AppInstanceId`, `subscriber: PrincipalId`, and
+> `wired_by: PrincipalId` parameters, returns `LiquidError` (not a
+> dedicated `BrokerError`), and uses a tokio `broadcast::Receiver`
+> (not a `BoxStream`). The flat `SlotName` keyspace is acceptable
+> for the single-process Phase-2 backend because the CLI process
+> drives exactly one workspace at a time and apps already namespace
+> their slots (`sheet:selectedRange`, `chart:data`). The
+> workspace + instance + principal-aware target signatures land
+> together with the Phase-4 distributed backend (M18) under
+> **TASK-020** so the cross-workspace and cross-process isolation
+> contract is enforced in one place. Until then, the shipped trait
+> is the binding surface for Dart-side TASK-012 + the wiring UI
+> in TASK-016b.
+
+Target signatures (Phase-4 alignment goal):
+
 ```rust
 #[async_trait]
 pub trait SlotBroker: Send + Sync {
@@ -911,9 +931,10 @@ independently.
 **Success criterion:** ✅ Shipped — the M8 success criterion test
 in `sdk/liquid_sdk/test/liquid_sdk_test.dart` defines a stub
 `LiquidComponent` with one input + one output, and the suite
-(6 / 6) exercises the typed surface (component declares, slot
-matcher routes by variant, manifest round-trips). `flutter test`
-exits 0; `flutter analyze` clean.
+(8 / 8) exercises the typed surface (component declares, slot
+matcher routes by variant, `SlotValue.json` + `SlotValue.bytes`
+structural-equality regressions, manifest round-trips).
+`flutter test` exits 0; `flutter analyze` clean.
 
 ---
 
@@ -947,13 +968,15 @@ exits 0; `flutter analyze` clean.
       `bridge.wireSlots(...)` — TASK-016b, depends on M6 page
       tooling.
 
-**Success criterion (Rust side):** ✅ Shipped — the 9 inline
+**Success criterion (Rust side):** ✅ Shipped — the 12 inline
 `SlotBroker` tests in `core/liquid-bindings/src/broker.rs` cover
 publish-no-subscribers / publish-then-receive / fan-out via wire
-/ self-wire rejection / idempotent re-wiring / save→load
+/ self-wire rejection / idempotent re-wiring / 2-hop cycle
+rejection (`wire`) / 3-hop cycle rejection (`wire`) / save→load
 round-trip surviving a fresh broker instance / load rejecting
-self-wires. End-to-end "Spreadsheet emits → Chart updates"
-demonstration ships with TASK-012 (Dart side).
+self-wires / load rejecting multi-hop cycles. End-to-end
+"Spreadsheet emits → Chart updates" demonstration ships with
+TASK-012 (Dart side).
 
 ---
 

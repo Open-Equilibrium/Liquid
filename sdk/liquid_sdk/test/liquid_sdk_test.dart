@@ -1,6 +1,4 @@
 // ignore_for_file: dangling_library_doc_comments
-// ignore_for_file: prefer_const_constructors
-// ignore_for_file: prefer_const_literals_to_create_immutables
 /// M8 plan-level success criterion
 /// (`IMPLEMENTATION_PLAN.md §6.1`):
 ///
@@ -96,24 +94,28 @@ void main() {
     });
 
     test('json equality is structural, not identity', () {
-      // Use runtime (`final`) maps + lists — `const` literals would
-      // be canonicalised by Dart to the same instance, so the
-      // pre-fix identity-based operator== would have wrongly passed.
-      // Building fresh `Map` / `List` objects forces the deep-equality
-      // path that DeepCollectionEquality is meant to handle. The
-      // `identical(a, b)` assertion below is the explicit guard
-      // against the test regressing back into the canonicalised form.
+      // Use runtime (`final`) maps — `const` SlotValue literals
+      // would be canonicalised by Dart to the same instance, so
+      // the pre-fix identity-based operator== would have wrongly
+      // passed. Building fresh outer `Map` objects per call site
+      // forces the deep-equality path that DeepCollectionEquality
+      // is meant to handle. The inner `const` lists are fine — they
+      // do not promote the enclosing (non-const) map to a const
+      // value, so `a` and `b` remain distinct heap objects.
+      // ignore: prefer_const_constructors, prefer_const_literals_to_create_immutables
       final a = SlotValue.json(<String, Object>{
         'k': 1,
-        'nested': <int>[1, 2, 3],
+        'nested': const <int>[1, 2, 3],
       });
+      // ignore: prefer_const_constructors, prefer_const_literals_to_create_immutables
       final b = SlotValue.json(<String, Object>{
         'k': 1,
-        'nested': <int>[1, 2, 3],
+        'nested': const <int>[1, 2, 3],
       });
+      // ignore: prefer_const_constructors, prefer_const_literals_to_create_immutables
       final c = SlotValue.json(<String, Object>{
         'k': 1,
-        'nested': <int>[1, 2, 4],
+        'nested': const <int>[1, 2, 4],
       });
       expect(identical(a, b), isFalse,
           reason: 'sanity: a and b must be distinct objects so the '
@@ -127,8 +129,11 @@ void main() {
     test('bytes equality is structural', () {
       // Same canonicalisation hazard as above — use `final` so each
       // call site produces a fresh `_Bytes` instance.
+      // ignore: prefer_const_constructors, prefer_const_literals_to_create_immutables
       final a = SlotValue.bytes(<int>[1, 2, 3]);
+      // ignore: prefer_const_constructors, prefer_const_literals_to_create_immutables
       final b = SlotValue.bytes(<int>[1, 2, 3]);
+      // ignore: prefer_const_constructors, prefer_const_literals_to_create_immutables
       final c = SlotValue.bytes(<int>[1, 2, 4]);
       expect(identical(a, b), isFalse);
       expect(a, b);
