@@ -18,6 +18,56 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Added — M5 Rust-side FFI bridge (TASK-011)
+
+- `liquid-sdk-bridge::BridgeServices<S, P, I, R>` — generic
+  composition root over `ContentStore` + `PermissionIndex` +
+  `IdentityProvider` + the new `WorkspaceRegistry`. Production
+  code substitutes `Filesystem*` variants at construction; tests
+  substitute `InMemory*`. Closes `IMPLEMENTATION_PLAN.md §5.5`
+  Rust-side surface.
+- Five token-gated FFI entry points on `BridgeServices` —
+  `create_workspace`, `list_workspaces`, `load_page`,
+  `write_page`, `check_permission`. Every method validates the
+  caller's token first (collapses every auth failure to
+  `LiquidError::Forbidden` per §4.5); every mutating /
+  data-touching arm runs `require_permission!` next per Absolute
+  Rule 4. `create_workspace` is the documented bootstrap
+  exception (no binding to gate against until the call creates
+  one) — Phase 3 will add an admin / quota gate.
+- `WorkspaceRegistry` trait + `InMemoryWorkspaceRegistry`
+  Phase-1 backend recording `{id, name, created_by,
+  created_unix}` for every workspace. The filesystem variant
+  is a follow-up that pairs with M6.5's CLI persistence work
+  (a process restart loses workspace *names* but not authority
+  — `FilesystemPermissionIndex` already persists role bindings).
+- `WorkspaceSummary` + `PageSnapshot` wire types in
+  `liquid-sdk-bridge::types`. `PageSnapshot::new(page_id, bytes)`
+  derives `content_hash` from `bytes` so the pair cannot be
+  inconsistent; `flutter_rust_bridge` codegen (TASK-012) will
+  emit a matching Dart constructor.
+- `core/liquid-sdk-bridge/tests/m5_end_to_end.rs` — 10-scenario
+  plan-level success-criterion suite wiring every Phase-1 crate
+  together (auth + permissions + vcs + bridge). Asserts the
+  tampered-token rejection, registry round-trip + owner-role
+  auto-assignment, `list_workspaces` filtering by binding,
+  `write_page → load_page` bytes + content-hash round-trip,
+  `AppViewer`-cannot-write, unbound-agent-cannot-read,
+  `check_permission` caller-authentication, and malformed
+  query-subject rejection.
+
+### Changed — `IMPLEMENTATION_PLAN.md §5.5` signature adaptation (ADR-004)
+
+- The five §5.5 FFI signatures move from free-standing `pub
+  async fn (principal: String, …)` to inherent `async` methods
+  on `BridgeServices<S, P, I, R>` whose first argument is
+  `token: &str`. A `principal: String` arg is spoofable;
+  Absolute Rule 4 demands an unforgeable token at the bridge
+  boundary. ADR-004
+  (`docs/adr/004-bridge-token-first-arg.md`) records the
+  decision + rejected alternatives. Dart-side TASK-012 will
+  receive the same adaptation via `flutter_rust_bridge` codegen.
+
 ### Fixed — Documentation review findings (M0-M5 audit)
 
 - `IMPLEMENTATION_PLAN.md §4.2` (PermissionIndex) now documents the

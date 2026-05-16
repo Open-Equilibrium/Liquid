@@ -230,84 +230,120 @@ deny `unsafe_code` and warn on `unwrap_used` / `expect_used` /
 test creates a workspace, writes a page, reads it back, and the
 round-trip data matches."
 
-**STATUS — PENDING.** As of the most recent merge to `main`, M5 is
-NOT yet implemented. The placeholder crate is in place
-(`core/liquid-sdk-bridge/`) but its `src/lib.rs` is empty other
-than a doc-comment pointing here. Phase-1 sequencing reasons:
+**STATUS — RUST SIDE DONE; DART SIDE PENDING (TASK-012).** The
+Rust composition root + five FFI entry points + workspace
+registry + wire types + 10-scenario end-to-end test all ship in
+TASK-011. The `flutter_rust_bridge` codegen + Dart integration
+test land in TASK-012 once M6 scaffolds `app/` and
+`sdk/liquid_sdk/`. ADR-004 documents the
+`BridgeServices`-with-`token: &str`-first-arg adaptation and the
+rationale; read it before reviewing the bridge surface.
 
-- M5 wraps the Dart-side `flutter_rust_bridge` codegen output,
-  which lives under `app/lib/bridge/` and `sdk/liquid_sdk/`.
-  Neither directory has been scaffolded yet — they land with M6 /
-  M6.5 (`IMPLEMENTATION_PLAN.md §5.6 + §5.7`).
-- The CLI-before-UI rule (Absolute Rule 6) means M6.5 (minimal
-  agent CLI) lands before M5's Dart integration test runs; M5
-  itself can land standalone but its happy-path proof needs a
-  Flutter test runner.
+What you are validating in **Step M5.0–M5.3 (Rust side)**: every
+M5 entry point exists, validates the caller's token first, runs
+`require_permission!` before any state-touching logic, and a
+write-then-read round-trips both the bytes and the
+`PageSnapshot::content_hash`.
 
-The section below is the **review checklist** an auditor follows
-when M5 lands, plus the manual steps a reviewer runs to validate
-the surface. Treat it as the specification for the eventual M5
-PR — every step has a concrete pass condition.
+What you are validating in **Step M5.4–M5.6 (Dart side, PENDING
+TASK-012)**: these steps stay as the PR-review checklist for the
+follow-up.
 
-The M5 PR will assign a TASK-NNN id and update this section in the
-same commit; until then, "TASK-pending" is the placeholder.
-
-### Step M5.0 — Confirm scaffold + dependency wiring
+### Step M5.0 — Crate surface + composition root
 
 ```sh
-ls core/liquid-sdk-bridge/src/                           # must include lib.rs + the new module files
-grep -n 'flutter_rust_bridge' core/liquid-sdk-bridge/Cargo.toml
-grep -rn '#\[frb' core/liquid-sdk-bridge/src/ | head
+ls core/liquid-sdk-bridge/src/
+grep -nE '^pub (mod|use)' core/liquid-sdk-bridge/src/lib.rs
 ```
 
-**Pass:** `lib.rs` re-exports the five M5 functions; `Cargo.toml`
-adds `flutter_rust_bridge` with the same major version that the
-Dart-side `pubspec.yaml` depends on; every `pub async fn` in the
-crate carries an `#[frb(sync)]` or `#[frb(stream)]` attribute as
-appropriate.
+**Pass:** `src/` lists `api.rs`, `lib.rs`, `registry.rs`,
+`services.rs`, `types.rs`. `lib.rs` re-exports
+`BridgeServices`, `InMemoryWorkspaceRegistry`, `WorkspaceRegistry`,
+`WorkspaceRecord`, `PageSnapshot`, and `WorkspaceSummary`.
 
-### Step M5.1 — Five FFI functions present
+### Step M5.1 — Five FFI methods present on `BridgeServices`
 
 ```sh
 grep -nE 'pub async fn (create_workspace|list_workspaces|load_page|write_page|check_permission)' \
-  core/liquid-sdk-bridge/src/
+  core/liquid-sdk-bridge/src/api.rs
 ```
 
-**Pass:** every name from `IMPLEMENTATION_PLAN.md §5.5`'s code block
-appears exactly once with the documented arity:
+**Pass:** every name appears exactly once with the post-ADR-004
+adapted signature (each method takes `&self, token: &str, …`).
+The signatures live verbatim in `IMPLEMENTATION_PLAN.md §5.5` —
+diff the grep output against that block.
 
-```rust
-pub async fn create_workspace(name: String) -> Result<WorkspaceId>;
-pub async fn list_workspaces(principal: String) -> Result<Vec<WorkspaceSummary>>;
-pub async fn load_page(workspace: WorkspaceId, page_id: PageId) -> Result<PageSnapshot>;
-pub async fn write_page(workspace: WorkspaceId, page_id: PageId,
-                        snapshot: PageSnapshot, author: String,
-                        message: String) -> Result<CommitId>;
-pub async fn check_permission(principal: String, action: String,
-                              resource: String) -> Result<bool>;
-```
-
-### Step M5.2 — Permission check is the FIRST line of every function
+### Step M5.2 — Token + permission gate are the first executable lines
 
 ```sh
-grep -nE 'pub async fn .*\{' core/liquid-sdk-bridge/src/*.rs
-grep -nA1 'pub async fn ' core/liquid-sdk-bridge/src/*.rs \
-  | grep -A1 'pub async fn' | grep -B1 'require_permission!'
+# Every method body must start with `self.identity.validate_token(token)?`
+# (or `.await?`) and then call `require_permission!` for mutating /
+# data-touching arms.
+grep -nA3 'pub async fn' core/liquid-sdk-bridge/src/api.rs \
+  | grep -E 'validate_token|require_permission!|pub async fn'
 ```
 
-**Pass:** every function body starts with `require_permission!(...)` — no
-other logic, no logging, no validation runs first. This is the
-spec-level enforcement of `CLAUDE.md`'s Absolute Rule 4. The
-linter will not catch a permission check that runs second or
-third; the reviewer must verify by reading the first executable
-line of every function.
+**Pass:** every method (other than `create_workspace`) shows
+`validate_token` → `require_permission!` in that order before any
+backend delegation. `create_workspace` validates the token only —
+no `require_permission!` — because the binding is created as a
+side effect (Phase-1 bootstrap; ADR-004 + §9 spell this out and
+Phase 3 will add an admin gate).
 
-**Regression shape:** if `require_permission!` is wrapped in any
-control flow (e.g. `if let Some(...) = ...`) before being called,
-the rule is broken. Reject the PR with a citation back to
-Absolute Rule 4.
+**Regression shape:** any other ordering, or a `require_permission!`
+inside an `if let Some(...)` / `match` arm, is a Rule-4
+violation. Reject the PR with a citation back to ADR-004.
 
-### Step M5.3 — Codegen output matches the Rust surface
+### Step M5.3 — Rust-side end-to-end + lints
+
+```sh
+cargo test --manifest-path core/Cargo.toml -p liquid-sdk-bridge \
+  2>&1 | .claude/hooks/filter-test-output.sh
+cargo clippy --manifest-path core/Cargo.toml -p liquid-sdk-bridge \
+  --all-targets --locked -- -D warnings \
+  2>&1 | .claude/hooks/filter-test-output.sh
+```
+
+**Expected:** two test-result summary lines:
+
+- `liquid-sdk-bridge` inline unit tests: **5 passed; 0 failed**
+  (parse-principal happy / unknown-kind / missing-colon / bad-uuid;
+  `page_path` canonical form).
+- `liquid-sdk-bridge::m5_end_to_end` integration suite:
+  **10 passed; 0 failed** — tampered-token rejection on
+  `create_workspace`, registry round-trip + owner-role
+  auto-assignment, `list_workspaces` filtering by Read binding,
+  full `write_page → load_page` bytes + content-hash round-trip,
+  `AppViewer`-cannot-write rejection, unbound-agent-cannot-read,
+  `check_permission` caller-authentication, and malformed
+  query-subject rejection.
+
+Clippy is clean (`-D warnings` includes the workspace
+`unwrap_used` / `expect_used` / `panic` warnings — the bridge has
+none outside `#[cfg(test)]`).
+
+**Regression shape:** if any of the 10 e2e cases fails, the
+bridge contract is broken. If the `parse_principal_*` inline
+tests fail, the wire-format coupling between `PrincipalId::Display`
+and `check_permission`'s subject-id arg has drifted.
+
+### Step M5.4 — Dart integration test round-trip *(PENDING TASK-012)*
+
+```sh
+cd sdk/liquid_sdk
+flutter test test/bridge_integration_test.dart
+```
+
+**Pass:** the test creates a workspace, provisions a principal,
+writes a page, reads it back, and asserts the round-trip data is
+byte-identical. The plan-level success criterion in §5.5 is this
+exact test. Output should end with `+1: All tests passed!`.
+
+**Regression shape:** if the test fails with a serde mismatch on
+`PageSnapshot` or `WorkspaceSummary`, the Rust-side types changed
+without a matching codegen run. Re-run §M5.5 first.
+
+### Step M5.5 — Codegen output matches the Rust surface *(PENDING TASK-012)*
 
 `flutter_rust_bridge` writes generated Dart bindings into
 `app/lib/bridge/`. The PR must commit these files (they are
@@ -325,42 +361,10 @@ committed files. Any diff means the contributor edited generated
 files by hand, or the codegen version drifted from the version
 pinned in `sdk/liquid_sdk/pubspec.yaml`. Either is a hard rejection.
 
-### Step M5.4 — Dart integration test round-trip
+### Step M5.6 — Workspace-wide lints
 
 ```sh
-cd sdk/liquid_sdk
-flutter test test/bridge_integration_test.dart
-```
-
-**Pass:** the test creates a workspace, provisions a principal,
-writes a page, reads it back, and asserts the round-trip data is
-byte-identical. The plan-level success criterion in §5.5 is this
-exact test. Output should end with `+1: All tests passed!`.
-
-**Regression shape:** if the test fails with a serde mismatch on
-`PageSnapshot` or `WorkspaceSummary`, the Rust-side types changed
-without a matching codegen run. Re-run §M5.3 first.
-
-### Step M5.5 — End-to-end via the M3 + M4 stack
-
-The bridge wraps three previous milestones. A manual sanity-check
-that exercises the whole stack:
-
-```sh
-cargo test -p liquid-sdk-bridge --manifest-path core/Cargo.toml \
-  2>&1 | .claude/hooks/filter-test-output.sh
-```
-
-**Pass:** the crate's own Rust-side unit tests (each FFI function
-in isolation, mocking the inner services where useful) pass; the
-suite must include at least one test per public function asserting
-the permission-denied path returns `Err(LiquidError::Forbidden)`
-without touching the inner store.
-
-### Step M5.6 — Lints
-
-```sh
-cargo clippy --manifest-path core/Cargo.toml -p liquid-sdk-bridge \
+cargo clippy --manifest-path core/Cargo.toml --workspace \
   --all-targets --locked -- -D warnings \
   2>&1 | .claude/hooks/filter-test-output.sh
 ```
@@ -379,12 +383,13 @@ Tick every box before stamping the run-log:
 - [ ] M4 — `grep -nE 'unwrap\(\)|expect\(' core/liquid-cache/src/
             core/liquid-vcs/src/cached.rs | grep -vE 'cfg.*test'`
       is empty.
-- [ ] M5 — STATUS still PENDING ⇒ open the M5 PR follow-up issue
-      with a link back to this guide's §M5 review checklist; do
+- [ ] M5 (Rust side) — Step M5.0 + M5.1 + M5.2 + M5.3 all green;
+      the `m5_end_to_end` suite reports 10 passed and the inline
+      `parse_principal` + `page_path` suite reports 5 passed.
+- [ ] M5 (Dart side) — STATUS still PENDING-TASK-012 ⇒ M5.4 +
+      M5.5 stay unchecked. Open / link the M5 Dart-side issue
+      with a pointer to this guide's §M5 follow-up steps; do
       NOT tag Phase-1 complete.
-- [ ] M5 — when STATUS flips to DONE: every M5.x step green,
-      generated bridge files byte-identical to a fresh codegen
-      run, Dart integration test reports `+1: All tests passed!`.
 - [ ] Cross-milestone — `cargo test --workspace --locked` green;
       `cargo clippy --workspace --all-targets --locked -- -D
       warnings` clean; `cargo fmt --all --check` clean.
@@ -410,5 +415,10 @@ not tag the release.
 - `docs/adr/001-jujutsu-pinning.md` — why the cache's
   `undo`-invalidation is workspace-wide today (precise
   invalidation waits on the `jj-lib` backend).
+- `docs/adr/004-bridge-token-first-arg.md` — why the M5 bridge
+  surface adapts to `BridgeServices` + `token: &str` rather than
+  the §5.5 sketch's free-standing `pub async fn (principal: String)`.
+- `core/liquid-sdk-bridge/tests/m5_end_to_end.rs` — the 10-scenario
+  M5 success-criterion suite (Rust side).
 - `CHANGELOG.md` — every M4 / M5 surface change ships with a
   matching `## [Unreleased]` entry.

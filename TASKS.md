@@ -56,9 +56,78 @@ list/delete`, `page history`, `auth login/whoami`, `app …` subcommands,
 and the `--as` impersonation flag. Every mutation continues to run
 `require_permission!` first; every command has bats coverage.
 
+### [TASK-012] M5 Dart side — `flutter_rust_bridge` codegen + integration test
+
+**Phase:** 1
+**Milestone:** M5 (IMPLEMENTATION_PLAN.md §5.5, Dart half)
+**Status:** Planned
+**Blocked by:** M6 scaffolding `app/` + `sdk/liquid_sdk/`
+
+**What.** Add `flutter_rust_bridge` to `liquid-sdk-bridge`, annotate
+`BridgeServices` + the 5 entry points with `#[frb]`, run the codegen
+into `app/lib/bridge/`, and write the Dart integration test the §5.5
+success criterion describes (create workspace → write page → read
+back → assert round-trip data + content_hash matches).
+
+**Acceptance criteria.**
+- [ ] `flutter test test/bridge_integration_test.dart` reports
+      `+1: All tests passed!`
+- [ ] `flutter_rust_bridge_codegen generate --no-write` produces
+      output byte-identical to the committed `app/lib/bridge/*`
+      files (codegen-version pin + no manual edits).
+- [ ] Every `#[frb]`-annotated method on `BridgeServices` calls
+      `IdentityProvider::validate_token` first and (for mutating /
+      data-touching arms) `require_permission!` second (CLAUDE.md
+      Absolute Rule 4 + ADR-004).
+- [ ] `docs/manual-validation-m4-m5.md` §M5 STATUS flips from
+      `RUST SIDE DONE; DART SIDE PENDING` to `DONE`; the §M5.4 +
+      §M5.5 "PENDING TASK-012" tags are removed.
+
 ---
 
 ## Done tasks
+
+### [TASK-011] M5 Rust side — `liquid-sdk-bridge` composition root + 5 FFI entry points
+
+**Phase:** 1
+**Milestone:** M5 (IMPLEMENTATION_PLAN.md §5.5, Rust half)
+**Status:** Done
+
+**What.** Shipped the Rust side of the M5 bridge:
+`BridgeServices<S, P, I, R>` generic composition root over
+`ContentStore` + `PermissionIndex` + `IdentityProvider` + the new
+`WorkspaceRegistry`; five token-gated FFI entries on
+`BridgeServices` (`create_workspace`, `list_workspaces`,
+`load_page`, `write_page`, `check_permission`); `PageSnapshot` +
+`WorkspaceSummary` wire types; `InMemoryWorkspaceRegistry` Phase-1
+backend. ADR-004 records the adaptation from the §5.5 sketch's
+free-standing `pub async fn` shape to the `BridgeServices`-with-
+`token: &str` shape (the original signatures had no authentic
+principal to gate against — Rule-4 violation).
+
+**Acceptance criteria.**
+- [x] `cargo test -p liquid-sdk-bridge` is green (5 inline unit +
+      10 `m5_end_to_end` integration = 15 tests; covers every entry
+      point, the tampered-token rejection path, the
+      `Forbidden`-without-binding path, and the bytes +
+      content-hash round-trip)
+- [x] `cargo clippy --workspace --all-targets --locked -- -D
+      warnings` clean
+- [x] No `unwrap()` / `expect()` outside `#[cfg(test)]` /
+      `#[allow(clippy::unwrap_used, …)]`-gated test mods
+- [x] Every entry point validates the caller's token first;
+      every mutating arm runs `require_permission!` second
+      (`create_workspace` is the documented bootstrap exception
+      per §9 + ADR-004)
+- [x] `IMPLEMENTATION_PLAN.md` §5.5 (Rust side ticked, `[ ]`
+      remaining for Dart side under TASK-012) and §9
+      `liquid-sdk-bridge` entry updated to describe the shipped
+      composition root + `WorkspaceRegistry` trait
+- [x] `docs/manual-validation-m4-m5.md` §M5 STATUS flipped to
+      `RUST SIDE DONE; DART SIDE PENDING (TASK-012)`; §M5.0–M5.3
+      describe the Rust-side review steps
+
+
 
 ### [TASK-002] `ContentStore` trait + `InMemoryContentStore`
 
