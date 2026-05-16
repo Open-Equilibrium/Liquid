@@ -24,11 +24,18 @@ moved into a real version section when a release is cut.
   globally-unique-UUID tenant-isolation assumption that
   `workspace_matches` relies on for non-`Resource::Workspace` checks
   (workspace-strict for `Workspace`; workspace-agnostic for
-  `AppInstance / Component / Page / Field`, relying on
-  `Uuid::new_v4()` to disambiguate). Pairs with a new test
-  (`app_instance_bindings_in_two_workspaces_do_not_cross_match_distinct_uuids`)
-  in `core/liquid-permissions/tests/permission_index.rs` that pins
-  the assumption.
+  `AppInstance / Component / Page` via UUID uniqueness;
+  `Field(String)` flagged separately as Phase-3 follow-up). Pairs
+  with two new tests in
+  `core/liquid-permissions/tests/permission_index.rs` that
+  characterise the assumption:
+  `distinct_app_instance_uuids_do_not_cross_match_per_binding`
+  (defensive — distinct UUIDs in different workspaces stay
+  separate) and
+  `app_instance_check_is_workspace_agnostic_by_uuid_uniqueness_assumption`
+  (the assumption itself — `check` is workspace-agnostic by
+  design; isolation rests on `Uuid::new_v4`, not on the index
+  walking workspace ids).
 - `IMPLEMENTATION_PLAN.md §5.1` (M1 milestone) ticks all checkboxes
   now that the code has been shipped, and adds the `PageId`,
   `OperationId`, `CommitId`, `RoleId` types that the original list
