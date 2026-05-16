@@ -170,7 +170,10 @@ clean.
   round-trip-through-`from_hex` + collision-free test land in
   `core/liquid-core/tests/integration.rs` (workspace test count
   goes 26 → 30).
-- Workspace test count: **75** in M1–M4 (was 60).
+- Workspace test count: **75** in M1–M4 at this commit (was 60);
+  subsequent agent-discipline + audit-finding commits in the same
+  `[Unreleased]` cycle lift it to **121** (corner tests +
+  cross-workspace UUID isolation tests, see entries above).
 
 ### Documentation
 

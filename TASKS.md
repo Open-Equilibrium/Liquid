@@ -156,8 +156,11 @@ at the same complexity as the in-memory variant. The matching logic
 moved into `Binding::matches()` so both backends share one definition.
 
 **Acceptance criteria.**
-- [x] `cargo test -p liquid-permissions` is green (12 in-memory unit +
-      9 filesystem integration + 1 M3 end-to-end = 22 tests)
+- [x] `cargo test -p liquid-permissions` is green (14 in-memory unit
+      + 9 filesystem integration + 4 filesystem-corners coverage +
+      1 M3 end-to-end = 28 tests; the +2 in-memory tests pin the
+      §4.2 globally-unique-UUID tenant-isolation assumption; the +4
+      filesystem-corners tests cover open-time error paths)
 - [x] `cargo fmt --check` and
       `cargo clippy --workspace --all-targets --locked -- -D warnings`
       clean
@@ -181,9 +184,10 @@ hard-coded `BuiltInRole` permission matrix
 the `require_permission!` macro that gates every bridge / CLI callsite.
 
 **Acceptance criteria.**
-- [x] `cargo test -p liquid-permissions` is green (12 unit tests + the
+- [x] `cargo test -p liquid-permissions` is green (14 unit tests + the
       M3 plan-level end-to-end test that wires `liquid-auth` into the
-      flow)
+      flow; the +2 unit tests pin the §4.2 globally-unique-UUID
+      tenant-isolation assumption)
 - [x] `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings`
       clean
 - [x] No `unwrap()`/`expect()` outside `#[cfg(test)]`
