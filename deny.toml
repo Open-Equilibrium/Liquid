@@ -9,8 +9,21 @@
 # GPL-licensed crate or a fresh advisory without us noticing.
 
 [graph]
-# Limit checks to the workspace's actual target set. The Flutter shell
-# pulls in extra targets later; expand this list when it does.
+# Limit checks to Phase-1's actual target set (Linux / macOS / Windows
+# desktop, x86_64 + aarch64). Without this, cargo-deny walks every
+# transitive dep on every target — including wasi targets that pull
+# `wasip2`/`wasip3` via `getrandom`, which in turn bring in *two*
+# semver-major `wit-bindgen` versions (0.51 + 0.57) and trip the
+# `bans.multiple-versions = "deny"` rule on a platform we do not ship.
+# Phase 3 adds iOS / Android; expand this list then.
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "aarch64-unknown-linux-gnu" },
+    { triple = "x86_64-apple-darwin" },
+    { triple = "aarch64-apple-darwin" },
+    { triple = "x86_64-pc-windows-msvc" },
+    { triple = "aarch64-pc-windows-msvc" },
+]
 all-features = false
 no-default-features = false
 
@@ -70,13 +83,24 @@ license-files = [
 [bans]
 multiple-versions = "deny"
 wildcards = "deny"
+# Workspace-local crates referenced via `path = "..."` deps have no
+# version constraint (cargo treats them as a wildcard). We want to keep
+# `wildcards = "deny"` so a real `foo = "*"` in a Cargo.toml is caught,
+# but we have to exempt the workspace-internal path deps explicitly.
+allow-wildcard-paths = true
 highlight = "all"
 allow = []
 deny = [
-    # Copyleft family — belt and braces alongside the license filter.
     { name = "openssl-sys" },     # we use rustls-based stacks
 ]
-skip = []
+skip = [
+    # `argon2 0.5` (used in liquid-auth for password hashing) pins
+    # `rand_core 0.6`, which pins `getrandom 0.2`, while `tempfile` and
+    # `uuid` are on `getrandom 0.4`. The duplicate is upstream and
+    # resolves itself once argon2 ships a release on the new rand_core /
+    # getrandom line. Revisit when bumping `argon2` past 0.5.x.
+    { name = "getrandom" },
+]
 skip-tree = []
 
 # ── Source policy ────────────────────────────────────────────────────────────

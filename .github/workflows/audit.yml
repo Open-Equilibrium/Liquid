@@ -72,24 +72,32 @@ jobs:
           workspaces: core
 
       # EmbarkStudios/cargo-deny-action@v2 splits action inputs into two
-      # buckets:
-      #   - `arguments`         → placed BEFORE the command (top-level
-      #                            cargo-deny flags like --log-level)
-      #   - `command-arguments` → placed AFTER the command (subcommand
-      #                            flags like --config or --all-features)
+      # buckets, with the cargo-deny CLI laid out as:
       #
-      # `--config` and `--all-features` are flags of `cargo-deny check`,
-      # not of cargo-deny itself, so they must go in `command-arguments`.
-      # The previous attempt put them in `arguments`, which produced
-      # `error: unexpected argument '--config' found`.
+      #   cargo-deny <top-level flags> <command> <command-specific flags>
       #
-      # The action runs from $GITHUB_WORKSPACE (repo root), so the file
-      # path is `deny.toml`, not `../deny.toml`. (The deny.toml head
-      # comment's manual-invocation equivalent uses `../deny.toml` only
-      # because the manual command first `cd core && ...`.)
+      #   - `arguments`         → placed BEFORE <command> — top-level
+      #                            flags only (--log-level, --target,
+      #                            --all-features, --no-default-features,
+      #                            --manifest-path …)
+      #   - `command-arguments` → placed AFTER <command> — subcommand
+      #                            flags only (for `check`: --config,
+      #                            --hide-inclusion-graph, --exclude-dev,
+      #                            plus the positional WHICH …)
+      #
+      # `--config` lives on `check`, so it goes in `command-arguments`.
+      # We do not need `--all-features` because deny.toml's `[graph]`
+      # explicitly sets `all-features = false` (and `targets =` limits
+      # the graph walk to the Phase-1 desktop platforms — passing
+      # `--all-features` at the CLI would override the targets filter
+      # and re-introduce the wasi-only wit-bindgen duplicate that
+      # tripped the `bans` rule on PR #9's first cargo-deny run).
+      #
+      # The action runs from $GITHUB_WORKSPACE (repo root), so the
+      # config path is `deny.toml`, not `../deny.toml`.
       - name: Run cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           manifest-path: core/Cargo.toml
           command: check
-          command-arguments: --config deny.toml --all-features
+          command-arguments: --config deny.toml
