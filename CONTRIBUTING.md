@@ -205,6 +205,15 @@ as a follow-up:
 - Design decision contradicting/extending an existing one → new ADR in
   [`docs/adr/`](docs/adr/)
 
+The CHANGELOG-discipline `commit-msg` hook
+(`.lefthook/commit-msg/check-changelog.sh`) enforces this for the
+behaviour-change types: any `feat(*)` / `fix(*)` / `refactor(*)` /
+`perf(*)` / `chore(<non-tooling-scope>)` commit must either modify
+`CHANGELOG.md` in the same commit or carry a `[no-changelog]`
+trailer with a one-line justification. `docs(*)`, `test(*)`, and
+`chore(ci|claude|deps|ai|gh|tooling)` are exempt. Covered by 14
+bats cases in `tests/cli/04_changelog_gate.bats`.
+
 For projects working with AI agents, the
 [`.claude/skills/sync-docs/SKILL.md`](.claude/skills/sync-docs/SKILL.md)
 skill audits doc drift before you commit.

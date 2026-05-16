@@ -38,6 +38,13 @@ commit-msg:
     conventional-commits:
       run: .lefthook/commit-msg/check-conventional.sh {1}
 
+    # Reject commits that change user-visible behaviour but forget
+    # to update CHANGELOG.md. Exempt types: docs, test,
+    # chore(ci|claude|deps|ai|gh|tooling). Opt out with a
+    # `[no-changelog]` trailer + one-line justification.
+    changelog-discipline:
+      run: .lefthook/commit-msg/check-changelog.sh {1}
+
 pre-push:
   parallel: true
   commands:

@@ -20,6 +20,16 @@ moved into a real version section when a release is cut.
 
 ### Added
 
+- `commit-msg` lefthook step `changelog-discipline` running
+  `.lefthook/commit-msg/check-changelog.sh`. Rejects `feat(*)` /
+  `fix(*)` / `refactor(*)` / `perf(*)` / `chore(<non-tooling-scope>)`
+  commits that do not modify `CHANGELOG.md` and do not carry a
+  `[no-changelog]` trailer. Exempts `docs(*)`, `test(*)`, and
+  `chore(ci|claude|deps|ai|gh|tooling)`. Covered by 14 bats cases
+  in `tests/cli/04_changelog_gate.bats`. Documented in
+  `CONTRIBUTING.md` "Documentation as part of the change".
+
+
 - `.claude/rules/log-volume.md` — formalises the "any command output
   >50 lines must go through filter-test-output.sh, test-triager, or
   gh-job-log" discipline that was scattered across the goal block,
