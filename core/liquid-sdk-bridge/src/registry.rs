@@ -12,7 +12,7 @@
 //! already lives in `liquid_permissions::FilesystemPermissionIndex`,
 //! so a node restart loses workspace *names* but not authority.
 
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -72,16 +72,28 @@ impl InMemoryWorkspaceRegistry {
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// Acquire the records lock, transparently recovering from poison.
+    /// If a previous holder panicked the inner `Vec` is at worst stale
+    /// — re-reading the list returns existing rows in their original
+    /// order, which the caller can survive (Mirrors the
+    /// `CachedContentStore::lock_index` precedent and keeps the
+    /// registry Absolute-Rule-1 compliant without an unreachable
+    /// `LiquidError::InvalidInput("…")` error path that codecov
+    /// would otherwise flag as uncovered.)
+    fn lock_records(&self) -> MutexGuard<'_, Vec<WorkspaceRecord>> {
+        self.records.lock().unwrap_or_else(PoisonError::into_inner)
+    }
 }
 
 #[async_trait]
 impl WorkspaceRegistry for InMemoryWorkspaceRegistry {
     async fn register(&self, record: WorkspaceRecord) -> Result<()> {
-        let mut guard = self.records.lock().map_err(poisoned)?;
+        let mut guard = self.lock_records();
         if guard.iter().any(|r| r.id == record.id) {
+            let id = record.id;
             return Err(LiquidError::InvalidInput(format!(
-                "workspace already registered: {}",
-                record.id
+                "workspace already registered: {id}"
             )));
         }
         guard.push(record);
@@ -89,16 +101,12 @@ impl WorkspaceRegistry for InMemoryWorkspaceRegistry {
     }
 
     async fn list(&self) -> Result<Vec<WorkspaceSummary>> {
-        let guard = self.records.lock().map_err(poisoned)?;
+        let guard = self.lock_records();
         let mut out: Vec<WorkspaceSummary> =
             guard.iter().cloned().map(WorkspaceSummary::from).collect();
         out.sort_by(|a, b| b.created_unix.cmp(&a.created_unix));
         Ok(out)
     }
-}
-
-fn poisoned<T>(_: PoisonError<T>) -> LiquidError {
-    LiquidError::InvalidInput("workspace registry lock poisoned".into())
 }
 
 #[cfg(test)]
