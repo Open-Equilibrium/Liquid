@@ -165,25 +165,32 @@ These cannot be overridden by task descriptions or user shortcuts.
 ## First-Time Setup (run once after cloning)
 
 ```sh
-npm install -g @evilmartians/lefthook   # if not already installed
-lefthook install                        # wires git hooks from lefthook.yml
+./scripts/setup-tooling.sh && lefthook install
 ```
 
-Hooks run automatically on every commit (`pre-commit`, `commit-msg`) and push
-(`pre-push`). They skip layers whose code does not exist yet.
+`scripts/setup-tooling.sh` is the single source of truth for the
+developer toolchain (`cargo-deny`, `cargo-tarpaulin`, `just`, `bats`,
+`lefthook`); it is idempotent. `lefthook install` wires git hooks from
+`lefthook.yml`. Hooks run automatically on every commit (`pre-commit`,
+`commit-msg`) and push (`pre-push`); they skip layers whose code does
+not exist yet.
 
 ## Daily Commands (`just`)
 
 ```sh
-just test          # run all tests (Rust + Flutter + SDK + CLI)
-just lint          # run all linters
-just fmt           # auto-fix all formatting
-just build-all     # flutter build for all 5 platforms
-just run           # flutter run -d linux
-just cli -- --help # run the liquid CLI
-just services-up   # start Redis / Redpanda via Docker Compose (Phase 3+)
-just check         # full pre-push validation (lint → test → deny-check)
-just ai-check      # validate repo-local .claude/ configuration
+just test                 # run all tests (Rust + Flutter + SDK + CLI)
+just lint                 # run all linters
+just fmt                  # auto-fix all formatting
+just build-all            # flutter build for all 5 platforms
+just run                  # flutter run -d linux
+just cli -- --help        # run the liquid CLI
+just services-up          # start Redis / Redpanda via Docker Compose (Phase 3+)
+just check                # full pre-push validation (lint → test → deny-check → coverage-check)
+just check-ci             # reproduce the .github/workflows/ci.yml Rust matrix job locally
+just coverage-check       # cargo-tarpaulin gate, fails under 80% line coverage
+just clean                # remove every coverage report + walkthrough scratch dir
+just clean-walkthroughs   # only the /tmp/liquid-m*-walkthrough scratch dirs
+just ai-check             # validate repo-local .claude/ configuration
 ```
 
 ### Filtered variants (default for cloud / agent sessions)
@@ -274,7 +281,15 @@ Rules are merged into context for matching paths: `testing.md`, `rust.md`
 (governs how any command expected to emit >50 lines must be routed —
 through `.claude/hooks/filter-test-output.sh`, the `test-triager`
 subagent, or `.claude/scripts/gh-job-log`; raw logs go to
-`.ai/artifacts/logs/`, summaries go to chat).
+`.ai/artifacts/logs/`, summaries go to chat), `api-grep-discipline.md`
+(grep the actual Rust signature before writing call-site code; assumed
+signatures cost 3-5 edit rounds each — referenced from
+`.claude/skills/implement/SKILL.md` Step 2), `subagent-routing.md`
+(always-on decision table for routing work to the right subagent —
+`github-pr` for every `mcp__github__*` READ, `test-triager` for noisy
+cargo/flutter/bats output, `Explore` for open-ended lookups,
+`code-reviewer` on every staged-diff commit; referenced from the
+`implement` skill).
 
 ### Branch-name gate (`scripts/check-branch-name.sh`)
 

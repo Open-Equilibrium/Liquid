@@ -88,38 +88,70 @@ async fn try_read_app(
 }
 
 #[tokio::main(flavor = "current_thread")]
-#[allow(clippy::too_many_lines)]
 async fn main() {
-    // Stable, cross-platform location so the reader can inspect the
-    // on-disk state afterwards.
+    run_walkthrough().await;
+}
+
+/// Bundle of principals + tokens the walkthrough threads through every
+/// subsequent phase. Keeping it in one struct lets each phase be a
+/// small, named function with a tidy argument list.
+struct Actors {
+    workspace: WorkspaceId,
+    app: AppInstanceId,
+    owner: liquid_core::PrincipalId,
+    viewer_agent: liquid_core::PrincipalId,
+    editor_agent: liquid_core::PrincipalId,
+    owner_token: String,
+    viewer_token: String,
+    editor_token: String,
+}
+
+/// Top-level orchestrator. Split out of `main` so each phase of the
+/// walkthrough is a single, named function — easier to read, easier
+/// to keep under clippy's `too_many_lines` ceiling without an
+/// `#[allow]` escape hatch.
+async fn run_walkthrough() {
+    let (auth_root, perm_root) = prepare_roots();
+    let auth = LocalIdentityProvider::new(&auth_root, SECRET).expect("auth");
+    let actors = bootstrap_actors(&auth).await;
+
+    exercise_in_memory_index(&auth, &actors).await;
+    let perm_file = exercise_filesystem_index(&auth, &perm_root, &actors).await;
+    exercise_token_negative_surface(&auth, &auth_root, &actors).await;
+    print_inspection_hints(&auth, &perm_file);
+}
+
+/// Stable, cross-platform location so the reader can inspect the
+/// on-disk state afterwards. Returns `(auth_root, perm_root)`.
+fn prepare_roots() -> (std::path::PathBuf, std::path::PathBuf) {
     let root = std::env::temp_dir().join("liquid-m3-walkthrough");
     if root.exists() {
         std::fs::remove_dir_all(&root).expect("clean prior run");
     }
     std::fs::create_dir_all(&root).expect("create root");
-
     let auth_root = root.join("auth");
     let perm_root = root.join("perm");
     std::fs::create_dir_all(&auth_root).expect("auth root");
     std::fs::create_dir_all(&perm_root).expect("perm root");
-
     println!("M3 walkthrough — auth + permissions");
     println!("  root: {}", root.display());
+    (auth_root, perm_root)
+}
 
-    let auth = LocalIdentityProvider::new(&auth_root, SECRET).expect("auth");
+/// Register the workspace owner, provision the two agent principals,
+/// issue + round-trip-verify all three tokens.
+async fn bootstrap_actors(auth: &LocalIdentityProvider) -> Actors {
     let workspace = WorkspaceId::new();
     let app = AppInstanceId::new();
     println!("  workspace: {workspace}");
     println!("  app:       {app}");
 
-    // ── (1) register the workspace owner ─────────────────────────────────
     let owner = auth
         .register_user("alice", "owner-pw")
         .await
         .expect("owner");
     println!("  register user alice -> {owner}");
 
-    // ── (2) provision two agent principals ───────────────────────────────
     let viewer_agent = auth
         .provision_agent(workspace, owner, "viewer-bot")
         .await
@@ -131,7 +163,6 @@ async fn main() {
     println!("  provision viewer-bot -> {viewer_agent}");
     println!("  provision editor-bot -> {editor_agent}");
 
-    // ── (3) issue + round-trip tokens ────────────────────────────────────
     let owner_token = auth.issue_token(owner).await.expect("owner token");
     let viewer_token = auth.issue_token(viewer_agent).await.expect("viewer token");
     let editor_token = auth.issue_token(editor_agent).await.expect("editor token");
@@ -143,77 +174,61 @@ async fn main() {
     );
     println!("  token format: <principal>.<expires_unix>.<hmac_hex> — round-trip ok");
 
-    // ── (4) in-memory permission index — plan-level criterion ────────────
+    Actors {
+        workspace,
+        app,
+        owner,
+        viewer_agent,
+        editor_agent,
+        owner_token,
+        viewer_token,
+        editor_token,
+    }
+}
+
+/// Plan-level criterion: viewer cannot write, editor can, owner can both.
+async fn exercise_in_memory_index(auth: &LocalIdentityProvider, a: &Actors) {
     println!("  --- InMemoryPermissionIndex ---");
     let im = InMemoryPermissionIndex::new();
-    im.assign_role(workspace, owner, BuiltInRole::WorkspaceOwner, None)
-        .await
-        .expect("owner role");
-    im.assign_role(
-        workspace,
-        viewer_agent,
-        BuiltInRole::AppViewer,
-        Some(Resource::AppInstance(app)),
-    )
-    .await
-    .expect("viewer role");
-    im.assign_role(
-        workspace,
-        editor_agent,
-        BuiltInRole::AppEditor,
-        Some(Resource::AppInstance(app)),
-    )
-    .await
-    .expect("editor role");
+    seed_role_bindings(&im, a).await;
+
     assert_forbidden(
-        try_write_app(&im, &auth, &viewer_token, app).await,
+        try_write_app(&im, auth, &a.viewer_token, a.app).await,
         "viewer write",
     );
-    try_write_app(&im, &auth, &editor_token, app)
+    try_write_app(&im, auth, &a.editor_token, a.app)
         .await
         .expect("editor write");
-    try_read_app(&im, &auth, &owner_token, app)
+    try_read_app(&im, auth, &a.owner_token, a.app)
         .await
         .expect("owner read");
-    try_write_app(&im, &auth, &owner_token, app)
+    try_write_app(&im, auth, &a.owner_token, a.app)
         .await
         .expect("owner write");
-    try_read_app(&im, &auth, &viewer_token, app)
+    try_read_app(&im, auth, &a.viewer_token, a.app)
         .await
         .expect("viewer read");
     println!("  in-memory matrix: viewer write=Forbidden  editor write=OK  owner read+write=OK  viewer read=OK");
+}
 
-    // ── (5) filesystem permission index — disk-persistence proof ────────
+/// Same criterion but with bindings persisted to disk; the second
+/// `open` simulates a fresh process. Returns the path of the
+/// on-disk `permissions.toml` so the inspection-hints phase can
+/// print it.
+async fn exercise_filesystem_index(
+    auth: &LocalIdentityProvider,
+    perm_root: &std::path::Path,
+    a: &Actors,
+) -> std::path::PathBuf {
     println!("  --- FilesystemPermissionIndex (durable) ---");
     {
-        let fs_idx = FilesystemPermissionIndex::open(&perm_root).expect("open fs idx");
-        fs_idx
-            .assign_role(workspace, owner, BuiltInRole::WorkspaceOwner, None)
-            .await
-            .expect("owner role");
-        fs_idx
-            .assign_role(
-                workspace,
-                viewer_agent,
-                BuiltInRole::AppViewer,
-                Some(Resource::AppInstance(app)),
-            )
-            .await
-            .expect("viewer role");
-        fs_idx
-            .assign_role(
-                workspace,
-                editor_agent,
-                BuiltInRole::AppEditor,
-                Some(Resource::AppInstance(app)),
-            )
-            .await
-            .expect("editor role");
+        let fs_idx = FilesystemPermissionIndex::open(perm_root).expect("open fs idx");
+        seed_role_bindings(&fs_idx, a).await;
         // Drop the index so the on-disk TOML is fully closed.
     }
     let perm_file = perm_root
         .join("workspaces")
-        .join(workspace.to_string())
+        .join(a.workspace.to_string())
         .join("permissions.toml");
     assert!(
         perm_file.is_file(),
@@ -221,32 +236,62 @@ async fn main() {
         perm_file.display()
     );
 
-    // Re-open in a fresh struct (simulates fresh process). Bindings must
-    // survive intact.
-    let fs_idx2 = FilesystemPermissionIndex::open(&perm_root).expect("reopen fs idx");
+    let fs_idx2 = FilesystemPermissionIndex::open(perm_root).expect("reopen fs idx");
     assert_forbidden(
-        try_write_app(&fs_idx2, &auth, &viewer_token, app).await,
+        try_write_app(&fs_idx2, auth, &a.viewer_token, a.app).await,
         "viewer write (fs)",
     );
-    try_write_app(&fs_idx2, &auth, &editor_token, app)
+    try_write_app(&fs_idx2, auth, &a.editor_token, a.app)
         .await
         .expect("editor write (fs)");
-    try_write_app(&fs_idx2, &auth, &owner_token, app)
+    try_write_app(&fs_idx2, auth, &a.owner_token, a.app)
         .await
         .expect("owner write (fs)");
     println!("  fs matrix after reopen: viewer write=Forbidden  editor write=OK  owner write=OK");
+    perm_file
+}
 
-    // ── (6) token-tampering / unknown-key surface ───────────────────────
-    let tampered = format!("{owner_token}xx");
+/// Shared owner / viewer / editor role-binding seed used by both the
+/// in-memory and filesystem index phases.
+async fn seed_role_bindings(idx: &impl PermissionIndex, a: &Actors) {
+    idx.assign_role(a.workspace, a.owner, BuiltInRole::WorkspaceOwner, None)
+        .await
+        .expect("owner role");
+    idx.assign_role(
+        a.workspace,
+        a.viewer_agent,
+        BuiltInRole::AppViewer,
+        Some(Resource::AppInstance(a.app)),
+    )
+    .await
+    .expect("viewer role");
+    idx.assign_role(
+        a.workspace,
+        a.editor_agent,
+        BuiltInRole::AppEditor,
+        Some(Resource::AppInstance(a.app)),
+    )
+    .await
+    .expect("editor role");
+}
+
+/// Tampered, malformed, wrong-key, and expired tokens all collapse
+/// to `Forbidden` — no mode leak (§4.5).
+async fn exercise_token_negative_surface(
+    auth: &LocalIdentityProvider,
+    auth_root: &std::path::Path,
+    a: &Actors,
+) {
+    let tampered = format!("{}xx", a.owner_token);
     assert_forbidden(
         auth.validate_token(&tampered).await.map(|_| ()),
         "tampered token",
     );
     let wrong_key_provider =
-        LocalIdentityProvider::new(&auth_root, b"different-secret").expect("alt provider");
+        LocalIdentityProvider::new(auth_root, b"different-secret").expect("alt provider");
     assert_forbidden(
         wrong_key_provider
-            .validate_token(&owner_token)
+            .validate_token(&a.owner_token)
             .await
             .map(|_| ()),
         "wrong signing key",
@@ -256,14 +301,16 @@ async fn main() {
         auth.validate_token(malformed).await.map(|_| ()),
         "malformed token",
     );
-    // Expired: issue a token from a provider configured with a
-    // zero-second lifetime so the token is already past `expires_unix`
-    // by the time `validate_token` runs. Same secret as the main
-    // provider, so the HMAC matches; only the expiry field fails.
-    let short_lived = LocalIdentityProvider::new(&auth_root, SECRET)
+    // Expired: zero-lifetime provider issues a token already past
+    // `expires_unix`; same secret so HMAC matches, only the expiry
+    // field fails.
+    let short_lived = LocalIdentityProvider::new(auth_root, SECRET)
         .expect("short-lived provider")
         .with_token_lifetime(Duration::from_secs(0));
-    let expired_token = short_lived.issue_token(owner).await.expect("issue expired");
+    let expired_token = short_lived
+        .issue_token(a.owner)
+        .await
+        .expect("issue expired");
     // Real-world clocks may issue the token in the same second it is
     // validated; sleep a beat so `expires_unix < now` for sure.
     std::thread::sleep(Duration::from_secs(1));
@@ -274,8 +321,9 @@ async fn main() {
     println!(
         "  token negatives: tampered=Forbidden  wrong-key=Forbidden  malformed=Forbidden  expired=Forbidden"
     );
+}
 
-    // ── (7) on-disk inspection hints ────────────────────────────────────
+fn print_inspection_hints(auth: &LocalIdentityProvider, perm_file: &std::path::Path) {
     let users_path = auth.users_path();
     let agents_path = auth.agents_path();
     println!();

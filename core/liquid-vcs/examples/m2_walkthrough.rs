@@ -33,40 +33,59 @@ use liquid_core::{LiquidError, OperationId, PrincipalId, StorePath, WorkspaceId}
 use liquid_vcs::{ContentStore, FilesystemContentStore, OperationKind};
 
 #[tokio::main(flavor = "current_thread")]
-#[allow(clippy::too_many_lines)]
 async fn main() {
-    // Stable, cross-platform location so the reader can inspect the
-    // on-disk state afterwards. `temp_dir()` is `/tmp` on Linux, the
-    // OS temp dir on macOS/Windows.
-    let root = std::env::temp_dir().join("liquid-m2-walkthrough");
-    if root.exists() {
-        std::fs::remove_dir_all(&root).expect("clean prior run");
-    }
-    std::fs::create_dir_all(&root).expect("create root");
-    let root = root.as_path();
+    run_walkthrough().await;
+}
 
+const SEED_PAGES: [(&str, &str); 3] = [
+    (
+        "pages/welcome.md",
+        "# Welcome\n\nThis is the welcome page.\n",
+    ),
+    ("pages/notes.md", "- buy milk\n- review PR\n"),
+    (
+        "pages/todo.md",
+        "1. ship M2 walkthrough\n2. ship M3 walkthrough\n",
+    ),
+];
+
+/// Top-level orchestrator. Split out of `main` so each phase of the
+/// walkthrough is a single, named function — easier to read, easier
+/// to keep under clippy's `too_many_lines` ceiling without an
+/// `#[allow]` escape hatch.
+async fn run_walkthrough() {
+    let root = prepare_root();
     println!("M2 walkthrough — Filesystem ContentStore");
     println!("  root: {}", root.display());
 
-    let store = FilesystemContentStore::open(root).expect("open store");
+    let store = FilesystemContentStore::open(&root).expect("open store");
     let workspace = WorkspaceId::new();
     let author = PrincipalId::new_user();
     println!("  workspace: {workspace}");
     println!("  author: {author}");
 
-    // ── (1) three writes ────────────────────────────────────────────────
-    let paths = [
-        (
-            "pages/welcome.md",
-            "# Welcome\n\nThis is the welcome page.\n",
-        ),
-        ("pages/notes.md", "- buy milk\n- review PR\n"),
-        (
-            "pages/todo.md",
-            "1. ship M2 walkthrough\n2. ship M3 walkthrough\n",
-        ),
-    ];
-    for (raw, body) in paths {
+    seed_writes(&store, workspace, author).await;
+    verify_round_trip_reads(&store, workspace).await;
+    verify_list(&store, workspace).await;
+    let last_op_id = inspect_op_log(&store, workspace).await;
+    verify_undo(&store, workspace, last_op_id).await;
+    verify_on_disk_layout(&root, workspace);
+}
+
+/// Stable, cross-platform location so the reader can inspect the
+/// on-disk state afterwards. `temp_dir()` is `/tmp` on Linux, the OS
+/// temp dir on macOS/Windows.
+fn prepare_root() -> std::path::PathBuf {
+    let root = std::env::temp_dir().join("liquid-m2-walkthrough");
+    if root.exists() {
+        std::fs::remove_dir_all(&root).expect("clean prior run");
+    }
+    std::fs::create_dir_all(&root).expect("create root");
+    root
+}
+
+async fn seed_writes(store: &FilesystemContentStore, workspace: WorkspaceId, author: PrincipalId) {
+    for (raw, body) in SEED_PAGES {
         let path = StorePath::new(raw).expect("path");
         let commit = store
             .write(
@@ -80,9 +99,10 @@ async fn main() {
             .expect("write");
         println!("  write  {raw:<20} -> commit {commit}");
     }
+}
 
-    // ── (2) round-trip reads ────────────────────────────────────────────
-    for (raw, body) in paths {
+async fn verify_round_trip_reads(store: &FilesystemContentStore, workspace: WorkspaceId) {
+    for (raw, body) in SEED_PAGES {
         let path = StorePath::new(raw).expect("path");
         let got = store.read(workspace, &path).await.expect("read");
         assert_eq!(
@@ -92,8 +112,9 @@ async fn main() {
         );
         println!("  read   {raw:<20} -> {} bytes (OK)", got.len());
     }
+}
 
-    // ── (3) list ────────────────────────────────────────────────────────
+async fn verify_list(store: &FilesystemContentStore, workspace: WorkspaceId) {
     let prefix = StorePath::new("pages").expect("prefix");
     let mut listed = store.list(workspace, &prefix).await.expect("list");
     listed.sort_by(|a, b| a.as_str().cmp(b.as_str()));
@@ -101,13 +122,13 @@ async fn main() {
     for p in &listed {
         println!("  list   {}", p.as_str());
     }
+}
 
-    // ── (4) operation log ───────────────────────────────────────────────
+/// Returns the most recent op id — the caller threads it into `undo`.
+async fn inspect_op_log(store: &FilesystemContentStore, workspace: WorkspaceId) -> OperationId {
     let log = store.operation_log(workspace, 10).await.expect("op log");
     assert_eq!(log.len(), 3, "op log should have 3 entries");
-    // Newest first per the trait contract.
     let newest = log.first().expect("at least one op");
-    let last_op_id: OperationId = newest.id;
     let newest_path = match &newest.kind {
         OperationKind::Create { path, .. }
         | OperationKind::Update { path, .. }
@@ -120,10 +141,19 @@ async fn main() {
         newest.id,
         newest_path
     );
+    newest.id
+}
 
-    // ── (5) undo most recent ────────────────────────────────────────────
+async fn verify_undo(
+    store: &FilesystemContentStore,
+    workspace: WorkspaceId,
+    last_op_id: OperationId,
+) {
     let undo_commit = store.undo(workspace, last_op_id).await.expect("undo");
     println!("  undo   op {last_op_id} -> synthetic commit {undo_commit}");
+    // The newest op corresponds to the last write — `SEED_PAGES[2]`,
+    // `pages/todo.md`. Changing the SEED_PAGES order would invalidate
+    // this assertion; the assertion is the canary.
     let undone_path = StorePath::new("pages/todo.md").expect("path");
     let err = store
         .read(workspace, &undone_path)
@@ -134,8 +164,9 @@ async fn main() {
         "expected NotFound, got {err:?}"
     );
     println!("  read   pages/todo.md       -> NotFound (as expected)");
+}
 
-    // ── (6) on-disk peek ────────────────────────────────────────────────
+fn verify_on_disk_layout(root: &std::path::Path, workspace: WorkspaceId) {
     let ws_root = root.join(workspace.to_string());
     let files_dir = ws_root.join("files");
     let op_log = ws_root.join("op_log.jsonl");

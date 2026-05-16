@@ -42,10 +42,17 @@ Then execute every step below in order.
   ```
   Raw logs land in `.ai/artifacts/logs/`; only a compact summary reaches the
   main thread.
-- Delegate noisy investigation to subagents:
+- Delegate noisy investigation to subagents — see
+  [`.claude/rules/subagent-routing.md`](../../rules/subagent-routing.md)
+  for the full decision table:
   - `test-triager` for cargo/flutter/bats/analyzer log analysis.
   - `ui-validator` for Flutter widget/integration/golden validation.
   - `code-reviewer` for diff review (Step 6).
+  - `github-pr` for every `mcp__github__*` READ call (PRs, issues,
+    branches, CI status); `mcp__github__*` writes stay in the main
+    agent.
+  - `Explore` for open-ended "where is X / which files reference Y"
+    searches that span >3 grep candidates.
 - Save large artifacts (screenshots, golden diffs, traces) under
   `.ai/artifacts/{logs,ui,diffs}/`. Never paste them into chat.
 - Run the **narrowest** test first; escalate only after focused tests pass.
@@ -82,11 +89,40 @@ compile error or import error).
 Write only what the failing tests require. No extra abstractions, no
 future-proofing, no "while I'm here" cleanup.
 
+**Before the first call site:** grep the actual API signature
+(`grep -nE 'pub (fn|trait) <name>' core/<crate>/src/`) — see
+[`.claude/rules/api-grep-discipline.md`](../../rules/api-grep-discipline.md).
+Assumed signatures cost 3–5 edit rounds each; two minutes of grep
+replaces ten minutes of clippy / cargo-test ping-pong.
+
 ```sh
 cargo test -p <crate> --manifest-path core/Cargo.toml   # all green
 cd sdk/liquid_sdk && flutter test                        # all green
 bats tests/cli/<feature>.bats                            # all green
 ```
+
+**Before invoking `code-reviewer` (Step 6 / the pre-commit hook),
+run these two cheap pre-flight checks on every Rust crate you
+touched.** They catch the two most common review-blocker classes in
+under five seconds — way faster than waiting for the subagent to
+flag them:
+
+```sh
+# 1. Does it still compile? cargo check is ~10× faster than cargo
+#    test and surfaces type errors the reviewer cannot fix for you.
+cargo check --manifest-path core/Cargo.toml -p <crate>
+
+# 2. Did any new `unwrap()` / `expect()` slip into src/?
+#    Project Absolute Rule 1 forbids them outside `#[cfg(test)]`.
+#    `cfg.test` matches both `#[cfg(test)]` modules and
+#    `#![cfg_attr(test, allow(...))]` attributes.
+grep -nE 'unwrap\(\)|expect\(' core/<crate>/src/ | grep -vE 'cfg.*test'
+```
+
+Either output a finding ⇒ fix it before staging the diff. Treat both
+as hard gates: a non-empty grep result is a Rule-1 violation
+regardless of context, and a failing `cargo check` means the
+code-reviewer is reading broken code.
 
 **Hard gate:** If you wrote code no test exercises, delete it before moving on.
 

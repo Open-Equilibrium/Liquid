@@ -169,5 +169,51 @@ lint: lint-rust lint-app lint-sdk
 # Auto-fix ALL formatting
 fmt: fmt-rust fmt-app fmt-sdk
 
-# Full pre-push validation (same as CI: lint → test → cargo-deny)
-check: lint test deny-check
+# Full pre-push validation (same as CI: lint → test → cargo-deny → tarpaulin)
+check: lint test deny-check coverage-check
+
+# Remove all transient on-disk state the walkthroughs / examples
+# write under `<temp_dir>/liquid-m*-walkthrough`. The walkthroughs
+# themselves use `std::env::temp_dir()` (which is `/tmp` on Linux,
+# `/private/tmp` on macOS — honour `$TMPDIR` when set), and keep
+# their state after exit for human inspection (see
+# `core/liquid-vcs/examples/m2_walkthrough.rs` +
+# `core/liquid-permissions/examples/m3_walkthrough.rs`). This verb
+# is the explicit cleanup an agent runs before switching milestones
+# or moving to a fresh container. Idempotent — no-op on a clean tree.
+clean-walkthroughs:
+    bash -c 'rm -rf "${TMPDIR:-/tmp}"/liquid-m*-walkthrough'
+
+# Project-wide clean: removes every generated coverage report (Rust
+# tarpaulin HTML at repo-root `coverage/`, Flutter lcov at
+# `app/coverage/` and `sdk/liquid_sdk/coverage/`) and every
+# walkthrough's transient state. Does NOT touch cargo's target/ tree
+# (use `cargo clean` for that — the workspace `target/` is large and
+# expensive to rebuild, so an explicit verb avoids "lost an hour"
+# accidents).
+clean: clean-walkthroughs
+    rm -rf coverage/ app/coverage/ sdk/liquid_sdk/coverage/
+
+# Reproduce the .github/workflows/ci.yml Rust job locally with one verb.
+# Mirrors the workflow's `working-directory: core` plus the three exact
+# command-lines its Rust matrix job runs. Bump this together with the
+# `rust:` job in ci.yml so local + CI never drift.
+check-ci:
+    cd core && cargo fmt --all --check
+    cd core && cargo clippy --workspace --all-targets --locked -- -D warnings
+    cd core && cargo test --workspace --locked
+
+# Coverage gate — runs cargo-tarpaulin across the whole Rust workspace
+# and fails the build if line coverage drops below 80%. Same threshold
+# as `.codecov.yml`'s `coverage.status.project.default.target: 80%`.
+# Skips clean rebuilds so local re-runs stay quick.
+#
+# This is a LOCAL gate, not a CI mirror. CI's tarpaulin step
+# (`.github/workflows/ci.yml`) uploads cobertura XML to Codecov
+# (which enforces the 80% target via `.codecov.yml`); this recipe
+# instead fails the local build directly via `--fail-under 80` so
+# pre-push catches a coverage drop before CI does. Install with
+# `scripts/setup-tooling.sh` (or
+# `cargo install --locked cargo-tarpaulin --version ^0.31`).
+coverage-check:
+    cargo tarpaulin --manifest-path core/Cargo.toml --workspace --skip-clean --fail-under 80 --out Stdout

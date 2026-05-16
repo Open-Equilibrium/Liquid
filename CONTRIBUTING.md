@@ -67,13 +67,22 @@ For decisions that contradict or extend an existing ADR, add a new ADR in
 | Docker | 24+ | <https://docs.docker.com/get-docker/> *(only needed for `just services-up` in Phase 3)* |
 | `bats` | latest | <https://bats-core.readthedocs.io/en/stable/installation.html> *(only needed once `tests/cli/` exists)* |
 | `cargo-deny` | latest | `cargo install --locked cargo-deny` *(needed for `just deny-check` / `just check`; lefthook's `pre-push` and CI's `audit.yml` run the same gate)* |
+| `cargo-tarpaulin` | `^0.31` | `cargo install --locked cargo-tarpaulin --version ^0.31` *(needed for `just coverage-check` / `just check`; matches the version pinned in `.github/workflows/ci.yml`'s Rust job)* |
 
 ### First-time setup
 
 ```sh
 git clone https://github.com/open-equilibrium/liquid.git && cd liquid
-just install-hooks                      # wires git hooks via lefthook
-cargo test --manifest-path core/Cargo.toml --workspace   # sanity-check
+./scripts/setup-tooling.sh   # idempotently installs every tool above; then wires hooks via lefthook install
+```
+
+`scripts/setup-tooling.sh` is the single source of truth for which
+version of `cargo-deny`, `cargo-tarpaulin`, `just`, `bats`, and
+`lefthook` the repo targets. Re-running it after a successful run is a
+no-op. After install, sanity-check with:
+
+```sh
+cargo test --manifest-path core/Cargo.toml --workspace
 ```
 
 ### Daily commands
