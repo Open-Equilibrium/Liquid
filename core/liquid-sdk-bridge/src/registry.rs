@@ -233,7 +233,7 @@ fn io_err(stage: &str, e: &std::io::Error) -> LiquidError {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
     use tempfile::TempDir;
@@ -328,6 +328,36 @@ mod tests {
             matches!(err, LiquidError::InvalidInput(_)),
             "malformed toml must surface as InvalidInput, got {err:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn filesystem_open_surfaces_io_err_when_root_cannot_be_created() {
+        // Cover the `io_err` helper: `fs::create_dir_all` fails when
+        // the requested root traverses through a regular file (you
+        // cannot `mkdir` inside a file). The error must map to
+        // `LiquidError::InvalidInput` via the
+        // `io_err("create root", _)` path — otherwise that helper +
+        // its two-line body is unreachable from the happy-path
+        // tests.
+        let dir = TempDir::new().expect("tempdir");
+        let file_path = dir.path().join("not-a-dir");
+        fs::write(&file_path, b"i am a file").expect("seed file");
+        let through_file = file_path.join("subdir");
+        let err = FilesystemWorkspaceRegistry::open(&through_file)
+            .expect_err("create_dir_all must fail when parent is a file");
+        match err {
+            LiquidError::InvalidInput(msg) => {
+                assert!(
+                    msg.contains("workspace registry I/O"),
+                    "must route through io_err helper, got: {msg}"
+                );
+                assert!(
+                    msg.contains("create root"),
+                    "must name the failing stage, got: {msg}"
+                );
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
     }
 
     #[tokio::test]

@@ -18,6 +18,24 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — codecov patch coverage on M6.5 (TASK-008 follow-up)
+
+- `core/liquid-sdk-bridge/src/registry.rs`: added
+  `filesystem_open_surfaces_io_err_when_root_cannot_be_created`
+  test that points the registry root through a regular-file path
+  (`fs::create_dir_all` rejects that with `NotADirectory` on
+  every platform), forcing the `io_err("create root", _)` arm
+  to execute. Closes the only remaining patch-coverage gap on
+  the M6.5 PR — the `io_err` helper body (lines 231-232) was
+  flagged by codecov because every happy-path test in the
+  registry suite skipped the I/O-error mapping.
+
+Result: `liquid-sdk-bridge/src/registry.rs` patch coverage
+95.65% → **100% (67/67 lines)**; workspace coverage
+94.14% → **94.36%** (+0.23%). All 23 bridge tests + 28
+workspace test groups + 104 bats cases continue to pass;
+clippy clean; fmt clean.
+
 ### Fixed — Post-M6.5 audit (TASK-008 follow-up)
 
 - `core/liquid-core/src/ids.rs`: new
