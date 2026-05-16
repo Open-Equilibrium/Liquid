@@ -85,9 +85,12 @@ impl Binding {
     }
 }
 
-/// In-memory implementation of [`PermissionIndex`]. Phase-1 only — the disk-
-/// backed TOML variant called for in `IMPLEMENTATION_PLAN.md` §5.3 is queued
-/// as TASK-007.
+/// In-memory implementation of [`PermissionIndex`]. Use this in tests
+/// and dev mode where persistence is not required. The durable TOML-
+/// backed sibling [`crate::FilesystemPermissionIndex`] (TASK-007,
+/// `IMPLEMENTATION_PLAN.md` §5.3 last bullet) ships the same trait
+/// surface for Phase-1 production deployments; both backends share
+/// the [`Binding::matches`] check.
 #[derive(Debug, Default)]
 pub struct InMemoryPermissionIndex {
     bindings: Mutex<HashSet<Binding>>,

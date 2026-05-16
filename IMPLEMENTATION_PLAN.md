@@ -300,6 +300,22 @@ The canonical permission gate at every bridge / CLI callsite is the
 (re-exported from `liquid_permissions`). It awaits `check` and returns
 `Err(LiquidError::Forbidden)` from the enclosing `async fn` on denial.
 
+**Tenant-isolation note for resource UUIDs.** `check(principal,
+action, resource)` is workspace-strict for `Resource::Workspace(_)`
+(matched against the binding's stored `workspace`), and
+workspace-agnostic for `Resource::AppInstance|Component|Page|Field`.
+The latter relies on the **globally-unique UUID assumption**: every
+`AppInstanceId` / `ComponentId` / `PageId` is generated via
+`uuid::Uuid::new_v4()` and never reused across workspaces, so a
+binding for a UUID in workspace A cannot accidentally match a
+different-workspace check on the same UUID — the UUID would have to
+exist in both workspaces, which the ID generation rules out. Callers
+constructing `Resource::AppInstance(id)` from external input MUST
+still validate the UUID belongs to the workspace they intend to act
+on; the index does not re-derive that mapping. Phase 3's distributed
+backend will revisit this if cross-workspace UUID reuse ever becomes
+desirable (e.g. workspace migration).
+
 ### 4.3 ReadCache (`liquid-cache`)
 
 ```rust
@@ -1390,6 +1406,15 @@ named slot — which goes through the `SlotBroker` permission check in Rust.
 ---
 
 ## 12. Agent CLI Specification
+
+> **Implementation status.** The `liquid` binary
+> (`core/liquid-cli/src/main.rs`) is currently a stub that exits
+> `64` (`EX_USAGE`) with a pointer to this section. The MVP-slice
+> subset (`workspace create`, `auth provision-agent`, `auth token`,
+> `page write`, `page read`, `audit list`, `page undo`) lands in
+> M6.5 (§5.6, TASK-008); the remainder of the grammar below lands
+> in M7 (§5.8, TASK-009). The spec is stable; treat the binary as
+> not-yet-implemented until those tasks close.
 
 ### Authentication
 

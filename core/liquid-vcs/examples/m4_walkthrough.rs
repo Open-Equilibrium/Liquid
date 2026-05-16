@@ -10,27 +10,27 @@
 //! cargo run --manifest-path core/Cargo.toml -p liquid-vcs --example m4_walkthrough
 //! ```
 //!
-//! sees, in order:
+//! Setup (printed but not asserted): a workspace + filesystem store
+//! plus an in-process cache wrapped together as `CachedContentStore`.
+//! A `SpyStore`-style counter does not exist here (the M4 success-
+//! criterion test uses one); the walkthrough proves cache behaviour
+//! by observing on-disk side effects + assertions instead.
 //!
-//! 1. A workspace + filesystem store + in-process cache, wrapped
-//!    together as `CachedContentStore`. A small `SpyStore`-style
-//!    counter does not exist here (the M4 success-criterion test
-//!    uses one); the walkthrough proves cache behaviour by observing
-//!    on-disk side effects and elapsed-bytes timing instead.
-//! 2. A `write` of `pages/welcome.md` followed by two successive
+//! The four asserted phases the runner sees, in order:
+//!
+//! 1. A `write` of `pages/welcome.md` followed by two successive
 //!    `read`s. The first read warms the cache via the inner store;
 //!    the second read returns identical bytes from the cache.
-//! 3. A second `write` to the same path. The wrapper invalidates the
+//! 2. A second `write` to the same path. The wrapper invalidates the
 //!    prior content hash BEFORE the new bytes are visible; the
-//!    subsequent read observes the new content (the previous M4
-//!    success criterion is "cache hit", this one is "no stale
-//!    cache hit after write").
-//! 4. Per-workspace tenancy isolation: writing the same `pages/x`
+//!    subsequent read observes the new content (so the success
+//!    criterion "no stale cache hit after write" holds).
+//! 3. Per-workspace tenancy isolation: writing the same `pages/x`
 //!    path under TWO different workspaces caches each pair as a
 //!    distinct `(WorkspaceId, StorePath) → ContentHash` entry, so
 //!    reading from workspace B does not return workspace A's bytes
 //!    even though the index lives in one shared map.
-//! 5. An `undo` of the most recent write invalidates every cached
+//! 4. An `undo` of the most recent write invalidates every cached
 //!    entry under the affected workspace (conservative invalidation
 //!    per `IMPLEMENTATION_PLAN.md` §5.4 / TASK-004 follow-up). A
 //!    subsequent read of the welcome page returns the PREVIOUS

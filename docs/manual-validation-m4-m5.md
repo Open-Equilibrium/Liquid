@@ -53,9 +53,9 @@ Once M5's Dart side lands, these become required for §M5:
 | Flutter | stable channel | Drives the M5 Dart integration test (`sdk/liquid_sdk/test/bridge_integration_test.dart`). |
 | `flutter_rust_bridge_codegen` | matches the version pinned in `sdk/liquid_sdk/pubspec.yaml` | Regenerates `app/lib/bridge/*` so a contributor can confirm the committed bindings match the Rust surface byte-for-byte. |
 
-The M5 § marks every step as `PENDING (M5 lands in TASK-???)` so
-the guide can be reviewed end-to-end today and re-read unchanged
-when M5 merges.
+The M5 § carries a top-of-section `STATUS — PENDING` block so the
+guide can be reviewed end-to-end today and re-read unchanged when
+M5 merges (and the STATUS block flips to `DONE`).
 
 ```sh
 cd <repo-root>
@@ -122,9 +122,10 @@ cargo run --manifest-path core/Cargo.toml -p liquid-vcs \
   --example m4_walkthrough
 ```
 
-**Expected:** the example runs five phases against a real
-`FilesystemContentStore` under `/tmp/liquid-m4-walkthrough/`,
-prints a line per phase, and exits 0:
+**Expected:** the example runs four asserted phases against a real
+`FilesystemContentStore` under `/tmp/liquid-m4-walkthrough/` (plus
+a one-line setup banner for the workspace + author), prints a
+line per phase, and exits 0:
 
 ```
 M4 walkthrough — Cache layer wired into FilesystemContentStore
@@ -247,6 +248,9 @@ The section below is the **review checklist** an auditor follows
 when M5 lands, plus the manual steps a reviewer runs to validate
 the surface. Treat it as the specification for the eventual M5
 PR — every step has a concrete pass condition.
+
+The M5 PR will assign a TASK-NNN id and update this section in the
+same commit; until then, "TASK-pending" is the placeholder.
 
 ### Step M5.0 — Confirm scaffold + dependency wiring
 

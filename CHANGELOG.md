@@ -18,6 +18,38 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — Documentation review findings (M0-M5 audit)
+
+- `IMPLEMENTATION_PLAN.md §4.2` (PermissionIndex) now documents the
+  globally-unique-UUID tenant-isolation assumption that
+  `workspace_matches` relies on for non-`Resource::Workspace` checks
+  (workspace-strict for `Workspace`; workspace-agnostic for
+  `AppInstance / Component / Page / Field`, relying on
+  `Uuid::new_v4()` to disambiguate). Pairs with a new test
+  (`app_instance_bindings_in_two_workspaces_do_not_cross_match_distinct_uuids`)
+  in `core/liquid-permissions/tests/permission_index.rs` that pins
+  the assumption.
+- `IMPLEMENTATION_PLAN.md §5.1` (M1 milestone) ticks all checkboxes
+  now that the code has been shipped, and adds the `PageId`,
+  `OperationId`, `CommitId`, `RoleId` types that the original list
+  omitted, plus a cross-ref to the M1-M3 validation guide.
+- `IMPLEMENTATION_PLAN.md §5.4` and `§5.5` now cite the new
+  `docs/manual-validation-m4-m5.md` guide + `m4_walkthrough`
+  example, mirroring the §5.3 pattern.
+- `IMPLEMENTATION_PLAN.md §12` (Agent CLI Specification) carries
+  an opening "Implementation status" note pointing readers at M6.5
+  (TASK-008) and M7 (TASK-009); previously §12 read as a live spec
+  with no indication the `liquid` binary was a stub.
+- `core/liquid-permissions/src/index.rs::InMemoryPermissionIndex`
+  doc-comment said TASK-007 (disk-backed variant) was "queued";
+  TASK-007 is Done — the comment now cross-references the shipped
+  `FilesystemPermissionIndex`.
+- `docs/adr/001-jujutsu-pinning.md` references to ADR-005 now point
+  at the inline strategic ADR in `IMPLEMENTATION_PLAN.md §15`
+  (which is where ADR-005 actually lives, per the §15 numbering
+  note); previously the references read as dead links to a
+  separate file.
+
 ### Added — Manual validation guide for M4 + M5
 
 - `docs/manual-validation-m4-m5.md` (new) — auditable companion to
@@ -29,11 +61,11 @@ moved into a real version section when a release is cut.
   follows when M5 lands.
 - `core/liquid-vcs/examples/m4_walkthrough.rs` (new) — runnable,
   self-asserting reproduction of the M4 plan-level success criterion
-  against a real `FilesystemContentStore`. Five phases: cache hit on
-  second read, write invalidates prior hash (no stale hit),
-  per-workspace tenancy isolation, undo invalidates workspace cache,
-  and re-warm. Mirrors the per-milestone style of `m2_walkthrough` /
-  `m3_walkthrough`.
+  against a real `FilesystemContentStore`. Four asserted phases:
+  cache hit on second read, write invalidates prior hash (no stale
+  hit), per-workspace tenancy isolation, undo invalidates workspace
+  cache + re-warm. Mirrors the per-milestone style of
+  `m2_walkthrough` / `m3_walkthrough`.
 
 ### Fixed — CLI scaffold pointer
 
