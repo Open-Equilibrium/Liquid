@@ -290,6 +290,15 @@ or `feat/main-page-redesign` are unaffected. Covered by 11 cases in
   reaches the chat.
 - `save-artifacts.sh` — `PostToolUse` hook on `Edit|Write`. Snapshots
   `git status` and `git diff --stat` to `.ai/artifacts/diffs/`.
+- `pre-commit-review.sh` — `PreToolUse` hook on `Bash(git commit*)`.
+  Snapshots `git diff --staged` to `.ai/artifacts/diffs/pre-commit-*.diff`
+  and returns `decision: "ask"` so the harness asks the agent to spawn
+  the `code-reviewer` subagent on the snapshot before the commit lands.
+  The subagent is the gate: a non-empty `critical` array blocks the
+  commit. Warnings and suggestions are advisory and surface as
+  `additionalContext`. Opt out for trivial rebase / conflict-resolution
+  commits with `LIQUID_SKIP_PRE_COMMIT_REVIEW=1` and explain why in
+  the commit body. Empty staged diffs are a silent no-op.
 - `filter-test-output.sh` — manual helper. Pipe noisy output through it:
   ```sh
   cargo test 2>&1 | .claude/hooks/filter-test-output.sh

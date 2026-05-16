@@ -20,6 +20,16 @@ moved into a real version section when a release is cut.
 
 ### Added
 
+- `.claude/hooks/pre-commit-review.sh` — `PreToolUse` hook matched on
+  `Bash(git commit*)`. Snapshots `git diff --staged` to
+  `.ai/artifacts/diffs/pre-commit-<ts>.diff`, returns
+  `decision: "ask"`, and asks the agent to spawn the `code-reviewer`
+  subagent against the snapshot before the commit lands. The
+  subagent's `critical` array is the block; warnings and suggestions
+  remain advisory. Opt-out via `LIQUID_SKIP_PRE_COMMIT_REVIEW=1` for
+  rebase / conflict-resolution commits. Empty staged diff is a silent
+  no-op.
+
 - Pre-push branch-name gate (`scripts/check-branch-name.sh`, wired
   into `lefthook.yml`'s `pre-push` hook). Rejects pushes from `main`,
   bare `claude`, or any `claude/*` branch — the Claude Code agent
