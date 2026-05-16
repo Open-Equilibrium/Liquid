@@ -71,13 +71,25 @@ jobs:
         with:
           workspaces: core
 
-      # The action runs from $GITHUB_WORKSPACE (repo root). deny.toml lives
-      # at the repo root, so --config is relative to repo root, not to
-      # core/. (The deny.toml head comment shows the manual-invocation
-      # equivalent: `cd core && cargo deny --config ../deny.toml`.)
+      # EmbarkStudios/cargo-deny-action@v2 splits action inputs into two
+      # buckets:
+      #   - `arguments`         → placed BEFORE the command (top-level
+      #                            cargo-deny flags like --log-level)
+      #   - `command-arguments` → placed AFTER the command (subcommand
+      #                            flags like --config or --all-features)
+      #
+      # `--config` and `--all-features` are flags of `cargo-deny check`,
+      # not of cargo-deny itself, so they must go in `command-arguments`.
+      # The previous attempt put them in `arguments`, which produced
+      # `error: unexpected argument '--config' found`.
+      #
+      # The action runs from $GITHUB_WORKSPACE (repo root), so the file
+      # path is `deny.toml`, not `../deny.toml`. (The deny.toml head
+      # comment's manual-invocation equivalent uses `../deny.toml` only
+      # because the manual command first `cd core && ...`.)
       - name: Run cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           manifest-path: core/Cargo.toml
-          arguments: --config deny.toml --all-features
           command: check
+          command-arguments: --config deny.toml --all-features
