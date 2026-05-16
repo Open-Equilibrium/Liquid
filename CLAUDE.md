@@ -293,6 +293,17 @@ Rules are merged into context for matching paths: `testing.md`, `rust.md`
   Google/Firebase service files, keystores, `*.p12`) and destructive shell
   commands (`rm -rf`, `curl|sh`, `git push --force/-f`, `git reset --hard`,
   `git clean -f`, hook bypass via `--no-verify`).
+- **Force-pushes:** `git push --force` / `git push -f` (bare or with
+  trailing args) stay denied via four narrow deny patterns
+  (`Bash(git push --force)`, `Bash(git push --force *)`,
+  `Bash(git push -f)`, `Bash(git push -f *)`) — the patterns are
+  intentionally tight so they do **not** swallow `--force-with-lease`,
+  which is explicitly allowed via `Bash(git push --force-with-lease*)`.
+  Always prefer `--force-with-lease` over plain `--force` when a rebase
+  or rewrite has to overwrite a remote feature branch — it aborts if
+  anyone else pushed to the same ref in the meantime, preventing the
+  silent obliterate-someone-else's-work failure mode that bare `--force`
+  enables.
 
 ### Scripts (`.claude/scripts/`)
 - `py` — vetted Python entry point. Replaces the previous blanket

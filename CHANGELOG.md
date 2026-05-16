@@ -18,6 +18,17 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Changed
+
+- `.claude/settings.json`: tightened the `git push --force` / `git push
+  -f` deny patterns into four narrow literals (`--force`, `--force *`,
+  `-f`, `-f *`) so they no longer match `--force-with-lease`, and added
+  `Bash(git push --force-with-lease*)` to the allow list. Agents must
+  use `--force-with-lease` (never bare `--force`) when a rebase or
+  rewrite has to overwrite a remote feature branch — it refuses the
+  push if anyone else updated the ref in the meantime, preventing the
+  silent overwrite that bare `--force` enables.
+
 ### Added
 
 - `liquid-permissions::FilesystemPermissionIndex` — TOML-backed
