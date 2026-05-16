@@ -277,7 +277,10 @@ Rules are merged into context for matching paths: `testing.md`, `rust.md`
 (governs how any command expected to emit >50 lines must be routed —
 through `.claude/hooks/filter-test-output.sh`, the `test-triager`
 subagent, or `.claude/scripts/gh-job-log`; raw logs go to
-`.ai/artifacts/logs/`, summaries go to chat).
+`.ai/artifacts/logs/`, summaries go to chat), `api-grep-discipline.md`
+(grep the actual Rust signature before writing call-site code; assumed
+signatures cost 3-5 edit rounds each — referenced from
+`.claude/skills/implement/SKILL.md` Step 2).
 
 ### Branch-name gate (`scripts/check-branch-name.sh`)
 

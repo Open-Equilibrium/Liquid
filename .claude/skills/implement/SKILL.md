@@ -82,6 +82,12 @@ compile error or import error).
 Write only what the failing tests require. No extra abstractions, no
 future-proofing, no "while I'm here" cleanup.
 
+**Before the first call site:** grep the actual API signature
+(`grep -nE 'pub (fn|trait) <name>' core/<crate>/src/`) — see
+[`.claude/rules/api-grep-discipline.md`](../../rules/api-grep-discipline.md).
+Assumed signatures cost 3–5 edit rounds each; two minutes of grep
+replaces ten minutes of clippy / cargo-test ping-pong.
+
 ```sh
 cargo test -p <crate> --manifest-path core/Cargo.toml   # all green
 cd sdk/liquid_sdk && flutter test                        # all green
