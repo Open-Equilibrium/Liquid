@@ -40,11 +40,21 @@ Phase 1 ships a `FilesystemContentStore` (TASK-003) that satisfies the
 done properly with a known-good pinned `jj-lib` version.
 
 Both implementations sit behind the same `ContentStore` trait
-(per ADR-005), so application code does not change when we swap.
+(per ADR-005 — the inline strategic ADR in
+[`IMPLEMENTATION_PLAN.md §15`](../../IMPLEMENTATION_PLAN.md#15-key-design-decisions)),
+so application code does not change when we swap.
+
+> **Note on ADR numbering.** ADR-001 / ADR-002 / ADR-003 are tactical
+> ADRs that live as standalone files in `docs/adr/` (this file is
+> ADR-001). ADR-004 / ADR-005 / ADR-006 / ADR-007 / ADR-008 are
+> *strategic* ADRs that live inline in `IMPLEMENTATION_PLAN.md §15`
+> only — there is no `docs/adr/005-*.md` to chase. The §15 prefix
+> documents this dual numbering convention.
 
 ## Rationale
 
 **The trait abstraction is the load-bearing decision, not the engine.** ADR-005
+([`IMPLEMENTATION_PLAN.md §15`](../../IMPLEMENTATION_PLAN.md#15-key-design-decisions))
 already commits us to interface-first design: storage callers know only the
 trait. As long as `FilesystemContentStore` is faithful to the trait's contract
 (workspace isolation, atomic writes, op-log replay, exact undo of recorded

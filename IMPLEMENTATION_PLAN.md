@@ -300,6 +300,35 @@ The canonical permission gate at every bridge / CLI callsite is the
 (re-exported from `liquid_permissions`). It awaits `check` and returns
 `Err(LiquidError::Forbidden)` from the enclosing `async fn` on denial.
 
+**Tenant-isolation note for resource ids.** `check(principal,
+action, resource)` is workspace-strict for `Resource::Workspace(_)`
+(matched against the binding's stored `workspace`), and
+workspace-agnostic for the remaining four `Resource` variants. The
+matching strategy varies by variant:
+
+- `Resource::AppInstance(_)`, `Resource::Component(_)`,
+  `Resource::Page(_)` — relies on the **globally-unique UUID
+  assumption**: every `AppInstanceId` / `ComponentId` / `PageId` is
+  `uuid::Uuid::new_v4()` and never reused across workspaces, so a
+  binding for a UUID in workspace A cannot accidentally match a
+  different-workspace check on the same UUID. The UUID would have to
+  exist in both workspaces, which `new_v4` rules out by birthday-
+  bound construction.
+- `Resource::Field(String)` — has no globally-unique guarantee
+  (`"email"` is a likely field name in many workspaces). No Phase-1
+  `BuiltInRole` grants any permission on `Field` (see §9 role
+  matrix), so the surface is unreachable today. Before any Phase-3
+  role binds `Field`, either `Resource::Field` must carry a
+  qualifying id (e.g. `Field { component: ComponentId, name: String
+  }`) OR the index's `workspace_matches` arm must become
+  workspace-strict for `Field`. Tracked as a Phase-3 design item.
+
+Callers constructing any `Resource::*` variant from external input
+MUST validate the id belongs to the workspace they intend to act on;
+the index does not re-derive that mapping. Phase 3's distributed
+backend will revisit this if cross-workspace id reuse ever becomes
+desirable (e.g. workspace migration).
+
 ### 4.3 ReadCache (`liquid-cache`)
 
 ```rust
@@ -411,20 +440,24 @@ write via CLI. No app marketplace, no extensions, no multi-workspace UI.
 
 ### 5.1 Milestone 1 — Rust workspace bootstrap (week 1–2)
 
-- [ ] Create `core/Cargo.toml` workspace manifest listing all crates
-- [ ] Scaffold each crate with `lib.rs`, stub types, and `#[cfg(test)]` module
-- [ ] Implement `liquid-core` fully:
-  - `WorkspaceId`, `AppInstanceId`, `TenantConfig`, `ComponentId`
+- [x] Create `core/Cargo.toml` workspace manifest listing all crates
+- [x] Scaffold each crate with `lib.rs`, stub types, and `#[cfg(test)]` module
+- [x] Implement `liquid-core` fully:
+  - `WorkspaceId`, `AppInstanceId`, `TenantConfig`, `ComponentId`, `PageId`,
+    `OperationId`, `CommitId`, `RoleId`
   - `PrincipalId` (wraps a UUID; distinguishes User / Agent via enum variant)
-  - `ContentHash` (SHA-256 newtype)
-  - `SlotName`, `SlotValue` (typed enum: `String | Number | Bool | Json | Bytes`)
+  - `ContentHash` (SHA-256 newtype) — `ContentHash::of_bytes` helper
+    added in M4 so the SHA-256 dependency stays in one crate
+  - `SlotName`, `SlotValue` (typed enum: `Str | Num | Bool | Json | Bytes`)
   - `StorePath` (validated UTF-8 path, workspace-relative, no `..`)
   - `Action` enum: `Read | Write | Delete | Admin`
   - `Resource` enum: `Workspace | AppInstance | Component | Page | Field`
   - `LiquidError` top-level error type re-exported by all crates
-- [ ] Write unit tests for all ID types (construction, serialisation, equality)
+- [x] Write unit tests for all ID types (construction, serialisation, equality)
 
-**Success criterion:** `cargo test -p liquid-core` passes with ≥ 90% line coverage.
+**Success criterion:** `cargo test -p liquid-core` passes with ≥ 90% line
+coverage. Manual validation:
+[`docs/manual-validation-m1-m3.md`](docs/manual-validation-m1-m3.md) §M1.
 
 ---
 
@@ -456,7 +489,10 @@ three files, reads them back, undoes the last write, and verifies the
 file is gone — passes against both `FilesystemContentStore` (today) and
 `JujutsuContentStore` (when TASK-004 lands). On-disk durability is
 proven by re-opening the same root in a fresh process and reading the
-data back.
+data back. Manual validation:
+[`docs/manual-validation-m1-m3.md`](docs/manual-validation-m1-m3.md)
+§M2 plus the runnable
+`core/liquid-vcs/examples/m2_walkthrough.rs`.
 
 ---
 
@@ -551,7 +587,10 @@ two successive reads). Seven cache-wiring tests plus eight
 `InProcessCache`-trait tests cover read-warm, write-invalidate,
 undo-invalidate, miss-non-poisoning, content-addressable dedup
 across paths, and per-workspace tenancy isolation of the path→hash
-index.
+index. Manual validation:
+[`docs/manual-validation-m4-m5.md`](docs/manual-validation-m4-m5.md)
+plus the runnable example at
+`core/liquid-vcs/examples/m4_walkthrough.rs`.
 
 ---
 
@@ -575,7 +614,11 @@ index.
 - [ ] Write a Dart integration test that calls each function end-to-end
 
 **Success criterion:** Dart test creates a workspace, writes a page, reads it
-back, and the round-trip data matches.
+back, and the round-trip data matches. Manual validation +
+PR-review checklist:
+[`docs/manual-validation-m4-m5.md`](docs/manual-validation-m4-m5.md)
+§M5 (the section is marked PENDING and doubles as the M5-PR
+acceptance checklist until M5 lands).
 
 ---
 
@@ -1379,6 +1422,15 @@ named slot — which goes through the `SlotBroker` permission check in Rust.
 ---
 
 ## 12. Agent CLI Specification
+
+> **Implementation status.** The `liquid` binary
+> (`core/liquid-cli/src/main.rs`) is currently a stub that exits
+> `64` (`EX_USAGE`) with a pointer to this section. The MVP-slice
+> subset (`workspace create`, `auth provision-agent`, `auth token`,
+> `page write`, `page read`, `audit list`, `page undo`) lands in
+> M6.5 (§5.6, TASK-008); the remainder of the grammar below lands
+> in M7 (§5.8, TASK-009). The spec is stable; treat the binary as
+> not-yet-implemented until those tasks close.
 
 ### Authentication
 

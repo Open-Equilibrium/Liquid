@@ -286,8 +286,10 @@ cargo test -p liquid-auth -p liquid-permissions \
 | Crate | Suite | Pass count |
 |---|---|---|
 | `liquid-auth` | `local_provider` integration | 13 |
-| `liquid-permissions` | `permission_index` unit | 12 |
+| `liquid-auth` | `local_provider_corners` | 5 |
+| `liquid-permissions` | `permission_index` unit | 14 |
 | `liquid-permissions` | `filesystem_index` integration | 9 |
+| `liquid-permissions` | `filesystem_corners` | 4 |
 | `liquid-permissions` | `m3_end_to_end` (success criterion) | 1 |
 
 The `m3_end_to_end::m3_app_viewer_cannot_write_app_editor_can_owner_can_both`

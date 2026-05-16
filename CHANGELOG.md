@@ -18,6 +18,84 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — Documentation review findings (M0-M5 audit)
+
+- `IMPLEMENTATION_PLAN.md §4.2` (PermissionIndex) now documents the
+  globally-unique-UUID tenant-isolation assumption that
+  `workspace_matches` relies on for non-`Resource::Workspace` checks
+  (workspace-strict for `Workspace`; workspace-agnostic for
+  `AppInstance / Component / Page` via UUID uniqueness;
+  `Field(String)` flagged separately as Phase-3 follow-up). Pairs
+  with two new tests in
+  `core/liquid-permissions/tests/permission_index.rs` that
+  characterise the assumption:
+  `distinct_app_instance_uuids_do_not_cross_match_per_binding`
+  (defensive — distinct UUIDs in different workspaces stay
+  separate) and
+  `app_instance_check_is_workspace_agnostic_by_uuid_uniqueness_assumption`
+  (the assumption itself — `check` is workspace-agnostic by
+  design; isolation rests on `Uuid::new_v4`, not on the index
+  walking workspace ids).
+- `IMPLEMENTATION_PLAN.md §5.1` (M1 milestone) ticks all checkboxes
+  now that the code has been shipped, and adds the `PageId`,
+  `OperationId`, `CommitId`, `RoleId` types that the original list
+  omitted, plus a cross-ref to the M1-M3 validation guide.
+- `IMPLEMENTATION_PLAN.md §5.4` and `§5.5` now cite the new
+  `docs/manual-validation-m4-m5.md` guide + `m4_walkthrough`
+  example, mirroring the §5.3 pattern.
+- `IMPLEMENTATION_PLAN.md §12` (Agent CLI Specification) carries
+  an opening "Implementation status" note pointing readers at M6.5
+  (TASK-008) and M7 (TASK-009); previously §12 read as a live spec
+  with no indication the `liquid` binary was a stub.
+- `core/liquid-permissions/src/index.rs::InMemoryPermissionIndex`
+  doc-comment said TASK-007 (disk-backed variant) was "queued";
+  TASK-007 is Done — the comment now cross-references the shipped
+  `FilesystemPermissionIndex`.
+- `docs/adr/001-jujutsu-pinning.md` references to ADR-005 now point
+  at the inline strategic ADR in `IMPLEMENTATION_PLAN.md §15`
+  (which is where ADR-005 actually lives, per the §15 numbering
+  note); previously the references read as dead links to a
+  separate file.
+
+### Added — Manual validation guide for M4 + M5
+
+- `docs/manual-validation-m4-m5.md` (new) — auditable companion to
+  `manual-validation-m1-m3.md`. Covers the second half of Phase 1:
+  M4 (cache layer — `ReadCache` + `InProcessCache` +
+  `CachedContentStore`) with step-by-step focused-test, walkthrough,
+  invariant-by-inspection, and lints procedures; M5 (FFI bridge,
+  currently PENDING) as a PR-review checklist the next reviewer
+  follows when M5 lands.
+- `core/liquid-vcs/examples/m4_walkthrough.rs` (new) — runnable,
+  self-asserting reproduction of the M4 plan-level success criterion
+  against a real `FilesystemContentStore`. Four asserted phases:
+  cache hit on second read, write invalidates prior hash (no stale
+  hit), per-workspace tenancy isolation, undo invalidates workspace
+  cache + re-warm. Mirrors the per-milestone style of
+  `m2_walkthrough` / `m3_walkthrough`.
+
+### Fixed — codecov report (liquid-cli stub exemption)
+
+- `.codecov.yml` now ignores `core/liquid-cli/**`, formalising the
+  `IMPLEMENTATION_PLAN.md §15` policy ("Coverage target: ≥ 80% line
+  coverage on all crates except `liquid-cli`"). PR #15 tripped the
+  `codecov/patch` check at 0% because the one-line stub-message
+  edit in `core/liquid-cli/src/main.rs` (commit `ed2e004`,
+  "fix(cli): correct stub pointer to M6.5/M7") is by definition
+  uncovered — `fn main()` exits 64 with an `eprintln!` and has no
+  test surface until M6.5 ships the MVP CLI grammar. The exemption
+  is documented inline in the YAML with a re-evaluate-at-M6.5
+  note so the next agent does not silently leave the binary
+  uncovered once it has a testable surface.
+
+### Fixed — CLI scaffold pointer
+
+- `core/liquid-cli/src/main.rs` stub previously claimed the CLI grammar
+  lands in "M7 — see §5.7"; §5.7 is the Flutter shell milestone (M6),
+  not the CLI. The corrected stub points at M6.5 (§5.6, TASK-008, the
+  minimum surface that drives the MVP slice) and M7 (§5.8, TASK-009,
+  the rest of §12). Exit code unchanged (`64` / `EX_USAGE`).
+
 ### Fixed — M4 codecov
 
 - `CachedContentStore`: replaced `self.index.lock().map_err(|_|
@@ -113,7 +191,10 @@ clean.
   round-trip-through-`from_hex` + collision-free test land in
   `core/liquid-core/tests/integration.rs` (workspace test count
   goes 26 → 30).
-- Workspace test count: **75** in M1–M4 (was 60).
+- Workspace test count: **75** in M1–M4 at this commit (was 60);
+  subsequent agent-discipline + audit-finding commits in the same
+  `[Unreleased]` cycle lift it to **121** (corner tests +
+  cross-workspace UUID isolation tests, see entries above).
 
 ### Documentation
 

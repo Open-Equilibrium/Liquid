@@ -86,6 +86,7 @@ full developer workflow and `just --list` for every available command.
 | **Operators / self-hosters** | `docs/operations/` *(populates in Phase 3)* |
 | **Contributors** to Liquid itself | [`CONTRIBUTING.md`](CONTRIBUTING.md) + [`DEVELOPER_INFO.md`](DEVELOPER_INFO.md) |
 | **Architecture & design rationale** | [`DEVELOPER_INFO.md`](DEVELOPER_INFO.md), [`docs/adr/`](docs/adr/), [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) |
+| **Auditors validating a Phase-1 milestone** | [`docs/manual-validation-m1-m3.md`](docs/manual-validation-m1-m3.md), [`docs/manual-validation-m4-m5.md`](docs/manual-validation-m4-m5.md) |
 | **AI agents working on this repo** | [`CLAUDE.md`](CLAUDE.md) — mandatory project workflow |
 
 ## Contributing
