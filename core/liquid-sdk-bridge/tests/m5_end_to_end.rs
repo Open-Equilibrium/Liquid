@@ -53,6 +53,23 @@ fn setup() -> (TempDir, TestServices) {
 }
 
 #[tokio::test]
+async fn create_workspace_rejects_empty_name() {
+    let (_d, s) = setup();
+    let alice = s
+        .identity
+        .register_user("alice", "pw")
+        .await
+        .expect("register");
+    let token = s.identity.issue_token(alice).await.expect("token");
+
+    let result = s.create_workspace(&token, "   ".to_string()).await;
+    assert!(
+        matches!(result, Err(LiquidError::InvalidInput(_))),
+        "whitespace-only name must surface as InvalidInput (token is valid; the bridge's empty-name guard rejects), got {result:?}"
+    );
+}
+
+#[tokio::test]
 async fn create_workspace_rejects_tampered_token() {
     let (_d, s) = setup();
     let result = s
@@ -174,7 +191,9 @@ async fn write_page_then_load_page_round_trips_bytes() {
 }
 
 #[tokio::test]
-async fn write_page_rejects_app_viewer_role() {
+async fn write_page_rejects_unbound_agent() {
+    // An agent provisioned by the workspace owner but never assigned
+    // any role-binding cannot write — the unbound-zero-binding path.
     let (_d, s) = setup();
     let alice = s
         .identity
@@ -188,16 +207,63 @@ async fn write_page_rejects_app_viewer_role() {
         .expect("ws");
     let page_id = PageId::new();
 
-    // Provision an agent and grant it AppViewer-on-a-page-scope.
-    // (Phase-1 BuiltInRole::AppViewer permits Read on AppInstance/
-    // Component only; Pages are governed by WorkspaceMember-or-higher.
-    // An agent without any binding therefore cannot write.)
+    let bot = s
+        .identity
+        .provision_agent(ws, alice, "unbound-bot")
+        .await
+        .expect("provision");
+    let bot_token = s.identity.issue_token(bot).await.expect("bot token");
+
+    let snapshot = PageSnapshot::new(page_id, Bytes::from_static(b"hijacked"));
+    let result = s
+        .write_page(&bot_token, ws, page_id, snapshot, "should fail".to_string())
+        .await;
+
+    assert!(
+        matches!(result, Err(LiquidError::Forbidden)),
+        "agent without any binding must be Forbidden, got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn write_page_rejects_app_viewer_role_against_page_resource() {
+    // The AppViewer role permits Read on `AppInstance` /
+    // `Component` ONLY — never on `Page` (see
+    // `core/liquid-permissions/src/role.rs::permits`). A genuine
+    // AppViewer binding therefore cannot satisfy
+    // `require_permission!(Write, Page(_))`. This is the role-matrix
+    // path; the sibling test above covers the unbound path.
+    let (_d, s) = setup();
+    let alice = s
+        .identity
+        .register_user("alice", "pw")
+        .await
+        .expect("alice");
+    let alice_token = s.identity.issue_token(alice).await.expect("token");
+    let ws = s
+        .create_workspace(&alice_token, "demo".to_string())
+        .await
+        .expect("ws");
+    let page_id = PageId::new();
+    let app = liquid_core::AppInstanceId::new();
+
     let viewer = s
         .identity
         .provision_agent(ws, alice, "viewer-bot")
         .await
         .expect("provision");
     let viewer_token = s.identity.issue_token(viewer).await.expect("viewer token");
+
+    // Real AppViewer binding scoped to an AppInstance.
+    s.permissions
+        .assign_role(
+            ws,
+            viewer,
+            liquid_permissions::BuiltInRole::AppViewer,
+            Some(Resource::AppInstance(app)),
+        )
+        .await
+        .expect("assign AppViewer");
 
     let snapshot = PageSnapshot::new(page_id, Bytes::from_static(b"hijacked"));
     let result = s
@@ -212,7 +278,7 @@ async fn write_page_rejects_app_viewer_role() {
 
     assert!(
         matches!(result, Err(LiquidError::Forbidden)),
-        "agent without write binding must be Forbidden, got {result:?}"
+        "AppViewer-on-AppInstance binding does NOT permit Write on Page, got {result:?}"
     );
 }
 

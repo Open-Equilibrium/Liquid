@@ -68,6 +68,41 @@ moved into a real version section when a release is cut.
   decision + rejected alternatives. Dart-side TASK-012 will
   receive the same adaptation via `flutter_rust_bridge` codegen.
 
+### Fixed — Post-M5 audit (Rust-side TASK-011 follow-up)
+
+- `core/liquid-sdk-bridge/tests/m5_end_to_end.rs`: the
+  previous `write_page_rejects_app_viewer_role` test was a placebo
+  — the agent had zero bindings, so the test exercised the
+  zero-bindings path, not the role-matrix path it claimed.
+  Renamed to `write_page_rejects_unbound_agent` and added a new
+  `write_page_rejects_app_viewer_role_against_page_resource` test
+  that actually assigns `BuiltInRole::AppViewer` scoped to an
+  `AppInstance` and asserts the bridge rejects a `Page` write
+  (the genuine role-matrix path at `liquid-permissions::role.rs`).
+  Plus two registry inline tests (duplicate-id rejection,
+  newest-first sort) and an `empty_name → InvalidInput`
+  end-to-end test.
+- `docs/manual-validation-m4-m5.md` §M5.2: the previous Pass
+  description claimed "every method other than `create_workspace`"
+  runs `require_permission!`. Three methods actually omit the
+  macro, each with a different documented reason: `create_workspace`
+  (bootstrap), `list_workspaces` (per-row filtering instead of a
+  single-resource gate), and `check_permission` (gating a
+  permission *query* would loop). Rewrote §M5.2 + §9 to list
+  all three exceptions.
+- `IMPLEMENTATION_PLAN.md §9` `liquid-sdk-bridge` "Rules" section
+  reworded so the three `require_permission!` exceptions are
+  enumerated explicitly (matches `api.rs`'s module doc-comment).
+- `core/liquid-sdk-bridge/src/api.rs::now_unix` gains a
+  doc-comment explaining the `unwrap_or(0)` fallback's known
+  degraded-sort consequence — a misordered list is preferable
+  to a panic across the FFI boundary, but a reviewer should be
+  able to find the trade-off without grepping the rationale.
+- `docs/manual-validation-m4-m5.md` walkthrough line-count claim
+  fixed (was "9-line matrix", actual is ~12 progress lines).
+- `docs/manual-validation-m4-m5.md` §M5.3 expected test counts
+  updated for the new tests (5 + 2 + 12 = 19 bridge tests total).
+
 ### Fixed — Documentation review findings (M0-M5 audit)
 
 - `IMPLEMENTATION_PLAN.md §4.2` (PermissionIndex) now documents the
@@ -242,9 +277,12 @@ clean.
   `core/liquid-core/tests/integration.rs` (workspace test count
   goes 26 → 30).
 - Workspace test count: **75** in M1–M4 at this commit (was 60);
-  subsequent agent-discipline + audit-finding commits in the same
-  `[Unreleased]` cycle lift it to **121** (corner tests +
-  cross-workspace UUID isolation tests, see entries above).
+  subsequent agent-discipline + audit-finding + M5 commits in the
+  same `[Unreleased]` cycle lift it to **139** (corner tests +
+  cross-workspace UUID isolation tests + M5 inline-and-e2e suite
+  including the real AppViewer-on-AppInstance write rejection
+  test and the duplicate-id-rejection + sort-order registry
+  tests, see entries above).
 
 ### Documentation
 

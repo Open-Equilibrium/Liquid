@@ -64,6 +64,16 @@ fn parse_principal(s: &str) -> Result<PrincipalId> {
     }
 }
 
+/// Seconds since the Unix epoch, sourced from `SystemTime::now()`.
+///
+/// Returns `0` if the system clock is set before 1970 (e.g. an
+/// uninitialised RTC). The fallback honours Absolute Rule 1 (no
+/// `unwrap` / `expect` in production code) but does have a known
+/// degraded-sort consequence: every workspace created during a
+/// clock-skew window will share `created_unix = 0` and therefore
+/// sort to the back of `list_workspaces` results. This is preferable
+/// to panicking the bridge entry point — a misordered list is a
+/// degraded UX, a panic across the FFI boundary corrupts state.
 fn now_unix() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()

@@ -283,16 +283,35 @@ grep -nA3 'pub async fn' core/liquid-sdk-bridge/src/api.rs \
   | grep -E 'validate_token|require_permission!|pub async fn'
 ```
 
-**Pass:** every method (other than `create_workspace`) shows
-`validate_token` → `require_permission!` in that order before any
-backend delegation. `create_workspace` validates the token only —
-no `require_permission!` — because the binding is created as a
-side effect (Phase-1 bootstrap; ADR-004 + §9 spell this out and
-Phase 3 will add an admin gate).
+**Pass:** every method starts with
+`self.identity.validate_token(token).await?`. Two methods
+(`load_page` and `write_page`) immediately call
+`require_permission!` next — these are the data-touching arms
+that Absolute Rule 4 directly applies to. The other three are
+documented exceptions, each with a different reason:
 
-**Regression shape:** any other ordering, or a `require_permission!`
-inside an `if let Some(...)` / `match` arm, is a Rule-4
-violation. Reject the PR with a citation back to ADR-004.
+- `create_workspace` — Phase-1 bootstrap: the caller has no
+  binding yet (the binding is created as a side effect). Token
+  validation gates it; Phase 3 will add an admin / quota gate.
+  ADR-004 records the rationale.
+- `list_workspaces` — runs `PermissionIndex::check` per row to
+  filter the registry by Read authority. A single bridge-boundary
+  `require_permission!` would not make sense here (there is no
+  single resource to gate against).
+- `check_permission` — authenticates the caller (`validate_token`)
+  but does NOT gate the query subject. A permission *query* is
+  not itself a permission-protected action; gating it would
+  create a chicken-and-egg loop.
+
+The `api.rs` module doc-comment (lines 21-28) is the source of
+truth — re-read it if the spec ever drifts. The 5 inline tests
++ 11 e2e tests pin the behaviour at every entry point.
+
+**Regression shape:** any new method that does not start with
+`validate_token`, OR a method that touches the store / mutates
+state without `require_permission!` (the spec excludes are above
+— anything else is suspicious), is a Rule-4 violation. Reject
+the PR with a citation back to ADR-004.
 
 ### Step M5.3 — Rust-side end-to-end + walkthrough + lints
 
@@ -306,21 +325,26 @@ cargo clippy --manifest-path core/Cargo.toml -p liquid-sdk-bridge \
   2>&1 | .claude/hooks/filter-test-output.sh
 ```
 
-**Expected:** two test-result summary lines:
+**Expected:** three test-result summary lines:
 
-- `liquid-sdk-bridge` inline unit tests: **5 passed; 0 failed**
-  (parse-principal happy / unknown-kind / missing-colon / bad-uuid;
-  `page_path` canonical form).
+- `liquid-sdk-bridge::api` inline unit tests: **5 passed; 0
+  failed** (parse-principal happy / unknown-kind / missing-colon
+  / bad-uuid; `page_path` canonical form).
+- `liquid-sdk-bridge::registry` inline unit tests: **2 passed;
+  0 failed** (duplicate-id rejection; newest-first sort).
 - `liquid-sdk-bridge::m5_end_to_end` integration suite:
-  **10 passed; 0 failed** — tampered-token rejection on
-  `create_workspace`, registry round-trip + owner-role
-  auto-assignment, `list_workspaces` filtering by Read binding,
-  full `write_page → load_page` bytes + content-hash round-trip,
-  `AppViewer`-cannot-write rejection, unbound-agent-cannot-read,
-  `check_permission` caller-authentication, and malformed
-  query-subject rejection.
+  **12 passed; 0 failed** — empty-name rejection,
+  tampered-token rejection on `create_workspace`, registry
+  round-trip + owner-role auto-assignment, `list_workspaces`
+  filtering by Read binding, full `write_page → load_page`
+  bytes + content-hash round-trip, **unbound-agent-cannot-write**,
+  **AppViewer-bound-to-AppInstance-cannot-write-to-Page**
+  (real role-matrix path, not the unbound path),
+  unbound-agent-cannot-read, snapshot-page-id-mismatch
+  rejection, `check_permission` caller-authentication, and
+  malformed query-subject rejection.
 
-The walkthrough should print a 9-line matrix ending in
+The walkthrough should print ~12 progress lines ending in
 `M5 walkthrough OK` and exit 0. It exercises the same surface as
 the integration test but against the durable backends
 (`FilesystemContentStore` + `FilesystemPermissionIndex` +

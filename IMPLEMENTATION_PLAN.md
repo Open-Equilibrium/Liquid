@@ -1269,15 +1269,21 @@ M6.5's CLI persistence work.
 - Every method on `BridgeServices` validates the caller's token via
   `IdentityProvider::validate_token` first — every auth failure
   collapses to `LiquidError::Forbidden` per §4.5.
-- Mutating / data-touching methods then run `require_permission!`
-  against the resolved principal (`CLAUDE.md` Absolute Rule 4).
-- `create_workspace` is the one exception that does NOT run
-  `require_permission!`: workspace creation is a bootstrap operation
-  and the caller has no binding yet (the binding is the side
-  effect). Token validation gates it; Phase 3 will add an admin /
-  quota check.
-- `list_workspaces` filters by `PermissionIndex::check` per row,
-  not at the call boundary.
+- The two data-touching methods (`load_page`, `write_page`) run
+  `require_permission!` against the resolved principal next,
+  before any backend call (`CLAUDE.md` Absolute Rule 4).
+- Three methods do NOT use the `require_permission!` macro at the
+  call boundary, each for a different documented reason:
+  - `create_workspace` — Phase-1 bootstrap: the caller has no
+    binding yet (the binding is the side effect). Token
+    validation gates it; Phase 3 will add an admin / quota gate.
+  - `list_workspaces` — filters by `PermissionIndex::check` per
+    *row*, not at the call boundary; there is no single resource
+    to gate against.
+  - `check_permission` — exposes the permission query itself;
+    gating a permission *query* with `require_permission!` would
+    create a chicken-and-egg loop. Caller authentication
+    (`validate_token`) is still required.
 - `write_page` validates `snapshot.page_id == call.page_id` so a
   caller cannot route bytes to the wrong canonical path.
 - Every function is `async`.

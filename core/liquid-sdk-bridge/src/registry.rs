@@ -100,3 +100,53 @@ impl WorkspaceRegistry for InMemoryWorkspaceRegistry {
 fn poisoned<T>(_: PoisonError<T>) -> LiquidError {
     LiquidError::InvalidInput("workspace registry lock poisoned".into())
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    fn record(name: &str) -> WorkspaceRecord {
+        WorkspaceRecord {
+            id: WorkspaceId::new(),
+            name: name.to_string(),
+            created_by: PrincipalId::new_user(),
+            created_unix: 0,
+        }
+    }
+
+    #[tokio::test]
+    async fn register_rejects_duplicate_workspace_id() {
+        let r = InMemoryWorkspaceRegistry::new();
+        let first = record("alpha");
+        let dup = WorkspaceRecord {
+            id: first.id,
+            name: "beta".into(),
+            created_by: PrincipalId::new_user(),
+            created_unix: 1,
+        };
+        r.register(first.clone()).await.expect("first insert ok");
+        let err = r.register(dup).await.expect_err("duplicate id must fail");
+        assert!(matches!(err, LiquidError::InvalidInput(_)));
+        // Only the first record survives.
+        let listed = r.list().await.expect("list");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, first.id);
+        assert_eq!(listed[0].name, "alpha");
+    }
+
+    #[tokio::test]
+    async fn list_sorts_newest_first_by_created_unix() {
+        let r = InMemoryWorkspaceRegistry::new();
+        let mut older = record("older");
+        older.created_unix = 100;
+        let mut newer = record("newer");
+        newer.created_unix = 200;
+        r.register(older).await.expect("ok");
+        r.register(newer).await.expect("ok");
+        let listed = r.list().await.expect("list");
+        assert_eq!(listed.len(), 2);
+        assert_eq!(listed[0].name, "newer", "newest first");
+        assert_eq!(listed[1].name, "older");
+    }
+}
