@@ -18,6 +18,20 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Documentation
+
+- `tests/cli/README.md` (new) — explicit "skip-only until M6.5"
+  status note. Distinguishes the **live** tests
+  (`01_branch_name_gate.bats`, `02_bump_version.bats`,
+  `03_pre_commit_review_hook.bats`, `04_changelog_gate.bats`) from
+  the M6.5-pending spec scaffold (`00_mvp_slice.bats`, mostly
+  `skip "pending M6.5"`). Reviewers can now reject "CLI test
+  added" PR claims that turn out to be all-skip.
+- `.github/PULL_REQUEST_TEMPLATE.md` — new "Coverage claim"
+  author-checklist item asking the PR author to label any "CLI
+  integration test added" claim as either *live* or
+  *skip-pending-M6.5*.
+
 ### Changed
 
 - `deny.toml` license allow-list trimmed: removed `Zlib`,

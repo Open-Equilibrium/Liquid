@@ -61,6 +61,10 @@ cargo fmt --manifest-path core/Cargo.toml --check
       communication goes through `SlotBroker` (Absolute Rule 3).
 - [ ] **CLI before UI.** If this change touches data, it is reachable
       from the `liquid` CLI before any UI work begins (Absolute Rule 6).
+- [ ] **Coverage claim.** Any "CLI integration test added" claim above
+      is annotated as either *live* (test actually runs assertions
+      against the new behaviour) or *skip-pending-M6.5* (spec
+      scaffold only, every step is `skip`). See `tests/cli/README.md`.
 - [ ] **Conventional Commit message** with an appropriate scope
       (`feat(vcs):`, `fix(permissions):`, `docs:`, …).
 - [ ] **Docs updated.** I have updated, where relevant:
