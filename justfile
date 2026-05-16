@@ -172,6 +172,28 @@ fmt: fmt-rust fmt-app fmt-sdk
 # Full pre-push validation (same as CI: lint → test → cargo-deny → tarpaulin)
 check: lint test deny-check coverage-check
 
+# Remove all transient on-disk state the walkthroughs / examples
+# write under `<temp_dir>/liquid-m*-walkthrough`. The walkthroughs
+# themselves use `std::env::temp_dir()` (which is `/tmp` on Linux,
+# `/private/tmp` on macOS — honour `$TMPDIR` when set), and keep
+# their state after exit for human inspection (see
+# `core/liquid-vcs/examples/m2_walkthrough.rs` +
+# `core/liquid-permissions/examples/m3_walkthrough.rs`). This verb
+# is the explicit cleanup an agent runs before switching milestones
+# or moving to a fresh container. Idempotent — no-op on a clean tree.
+clean-walkthroughs:
+    bash -c 'rm -rf "${TMPDIR:-/tmp}"/liquid-m*-walkthrough'
+
+# Project-wide clean: removes every generated coverage report (Rust
+# tarpaulin HTML at repo-root `coverage/`, Flutter lcov at
+# `app/coverage/` and `sdk/liquid_sdk/coverage/`) and every
+# walkthrough's transient state. Does NOT touch cargo's target/ tree
+# (use `cargo clean` for that — the workspace `target/` is large and
+# expensive to rebuild, so an explicit verb avoids "lost an hour"
+# accidents).
+clean: clean-walkthroughs
+    rm -rf coverage/ app/coverage/ sdk/liquid_sdk/coverage/
+
 # Reproduce the .github/workflows/ci.yml Rust job locally with one verb.
 # Mirrors the workflow's `working-directory: core` plus the three exact
 # command-lines its Rust matrix job runs. Bump this together with the
