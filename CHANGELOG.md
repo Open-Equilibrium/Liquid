@@ -35,6 +35,14 @@ moved into a real version section when a release is cut.
   and re-warm. Mirrors the per-milestone style of `m2_walkthrough` /
   `m3_walkthrough`.
 
+### Fixed — CLI scaffold pointer
+
+- `core/liquid-cli/src/main.rs` stub previously claimed the CLI grammar
+  lands in "M7 — see §5.7"; §5.7 is the Flutter shell milestone (M6),
+  not the CLI. The corrected stub points at M6.5 (§5.6, TASK-008, the
+  minimum surface that drives the MVP slice) and M7 (§5.8, TASK-009,
+  the rest of §12). Exit code unchanged (`64` / `EX_USAGE`).
+
 ### Fixed — M4 codecov
 
 - `CachedContentStore`: replaced `self.index.lock().map_err(|_|
