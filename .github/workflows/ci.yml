@@ -285,11 +285,15 @@ jobs:
 
       - name: Install bats + helpers
         run: |
-          git clone https://github.com/bats-core/bats-core.git /tmp/bats-core
-          /tmp/bats-core/install.sh /usr/local
+          # bats-core's install.sh writes into /usr/local/{bin,libexec,lib,share}
+          # which requires root on the GitHub-hosted Ubuntu runner. Without
+          # sudo the install silently fails and the bats binary is missing
+          # for the next step — which is what failed the CLI job on PR #8.
+          git clone --depth 1 https://github.com/bats-core/bats-core.git /tmp/bats-core
+          sudo /tmp/bats-core/install.sh /usr/local
           mkdir -p test_helper
-          git clone https://github.com/bats-core/bats-support.git test_helper/bats-support
-          git clone https://github.com/bats-core/bats-assert.git  test_helper/bats-assert
+          git clone --depth 1 https://github.com/bats-core/bats-support.git test_helper/bats-support
+          git clone --depth 1 https://github.com/bats-core/bats-assert.git  test_helper/bats-assert
 
       - name: Run CLI tests
         run: bats tests/cli/

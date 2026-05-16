@@ -24,13 +24,18 @@ repository = "https://github.com/open-equilibrium/liquid"
 rust-version = "1.94"
 
 [workspace.dependencies]
-liquid-core = { path = "liquid-core" }
-liquid-vcs = { path = "liquid-vcs" }
-liquid-auth = { path = "liquid-auth" }
-liquid-permissions = { path = "liquid-permissions" }
-liquid-cache = { path = "liquid-cache" }
-liquid-bindings = { path = "liquid-bindings" }
-liquid-sdk-bridge = { path = "liquid-sdk-bridge" }
+# Workspace-internal crates. Both `path` and `version` are set so
+# cargo-deny (and crates.io's path-publish requirement) sees an explicit
+# version constraint rather than treating these as wildcard deps. The
+# version literal here is kept in lock-step with [workspace.package].version
+# above — bump both together at release time.
+liquid-core = { path = "liquid-core", version = "0.1.0" }
+liquid-vcs = { path = "liquid-vcs", version = "0.1.0" }
+liquid-auth = { path = "liquid-auth", version = "0.1.0" }
+liquid-permissions = { path = "liquid-permissions", version = "0.1.0" }
+liquid-cache = { path = "liquid-cache", version = "0.1.0" }
+liquid-bindings = { path = "liquid-bindings", version = "0.1.0" }
+liquid-sdk-bridge = { path = "liquid-sdk-bridge", version = "0.1.0" }
 
 async-trait = "0.1"
 bytes = { version = "1.7", features = ["serde"] }
