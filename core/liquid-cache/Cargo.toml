@@ -14,7 +14,7 @@ workspace = true
 liquid-core.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
-dashmap = "6.1"
+dashmap.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

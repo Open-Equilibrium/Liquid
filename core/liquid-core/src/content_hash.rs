@@ -43,11 +43,10 @@ impl ContentHash {
         let mut hex = String::with_capacity(64);
         for byte in digest {
             use std::fmt::Write as _;
-            // SAFETY: writing `{:02x}` of a byte into a `String`
-            // cannot fail — `String`'s `fmt::Write` impl is
-            // infallible. The `let _ =` discards the
-            // `Result<(), fmt::Error>` without the
-            // Absolute-Rule-violating `.unwrap()` / `.expect()`.
+            // `String`'s `fmt::Write` impl is infallible —
+            // `fmt::Error` is unreachable here. `let _ =` discards
+            // the `Result<(), fmt::Error>` without the
+            // Absolute-Rule-1-violating `.unwrap()` / `.expect()`.
             let _ = write!(hex, "{byte:02x}");
         }
         Self(hex)

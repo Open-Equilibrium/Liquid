@@ -18,6 +18,31 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — M4 follow-up
+
+- `deny.toml` `hashbrown` skip comment now enumerates all three
+  in-tree hashbrown versions and their dep sources (0.14.5 from
+  dashmap, 0.15.5 from wasmparser, 0.17.0 from toml/indexmap).
+  Comment was previously inaccurate (claimed two versions); the
+  skip itself was always correct and covered all three.
+- `dashmap` and `sha2` moved into `[workspace.dependencies]` so the
+  version literal lives in one place instead of three. Matches the
+  project's existing approach for `async-trait`, `bytes`, `tokio`,
+  etc.
+- `CachedContentStore`: removed dead `inner()` / `cache()`
+  `#[doc(hidden)]` accessors (no callers in test or production
+  code); replaced misuse of `// SAFETY:` comment in
+  `ContentHash::of_bytes` with a plain infallibility note.
+- `cache_is_independent_per_workspace_at_key_level` test now also
+  asserts that workspace B's second read serves from cache (was
+  only asserting that the returned bytes were correct).
+- Documented the Phase-1 write/undo limitation inline in
+  `CachedContentStore`: on inner-call failure the cache index is
+  already cleared and warm entries already invalidated;
+  correctness is preserved (the next read re-warms) but a perf
+  regression accumulates across retries. Phase 3 will revisit
+  when the bridge layer gains retry semantics.
+
 ### Added — M4 (cache layer)
 
 - `liquid-cache::ReadCache` trait (`get` / `put` / `invalidate`,

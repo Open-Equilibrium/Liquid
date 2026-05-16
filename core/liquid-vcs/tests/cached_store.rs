@@ -346,6 +346,11 @@ async fn cache_is_independent_per_workspace_at_key_level() {
 
     let r_b = store.read(ws_b, &path).await.expect("r B again");
     assert_eq!(r_b.as_ref(), b"B");
+    assert_eq!(
+        counts.read.load(Ordering::SeqCst),
+        reads_after_warm,
+        "second read of workspace B must also hit cache (proves both isolation and effectiveness)"
+    );
 }
 
 // `Operation` and `OperationKind` are re-exported through the trait so

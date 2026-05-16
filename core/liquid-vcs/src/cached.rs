@@ -67,20 +67,6 @@ where
             index: Mutex::new(HashMap::new()),
         }
     }
-
-    /// Borrow the wrapped store. Tests only.
-    #[doc(hidden)]
-    #[must_use]
-    pub fn inner(&self) -> &S {
-        &self.inner
-    }
-
-    /// Borrow the cache. Tests only.
-    #[doc(hidden)]
-    #[must_use]
-    pub fn cache(&self) -> &C {
-        &self.cache
-    }
 }
 
 #[async_trait]
@@ -133,6 +119,15 @@ where
         // Invalidate the prior hash so a stale entry can never serve
         // post-write reads. The index entry itself is also dropped;
         // the next read re-hashes the (now-new) bytes and re-warms.
+        //
+        // Phase-1 known limitation: if the inner write returns Err,
+        // the cache is already invalidated even though the inner
+        // store still holds the OLD bytes. Correctness is preserved
+        // (the next read falls through and re-warms), but the warm
+        // cache entry is lost — a silent performance regression on
+        // failure. Phase 3 (when retry semantics arrive on the
+        // bridge layer) should snapshot-then-rollback the index
+        // mutation on inner-call failure. Tracked under M4 follow-up.
         let prior = {
             let mut idx = self
                 .index
@@ -158,6 +153,11 @@ where
         // operation log carries enough information to do a precise
         // path-targeted invalidation (TASK-004's jj-lib backend
         // exposes per-op affected-paths).
+        //
+        // Phase-1 known limitation (same shape as `write` above): if
+        // the inner undo returns Err, the cache is already flushed
+        // and correctness is preserved but a warm slice of the
+        // cache is lost. Same Phase-3 follow-up applies.
         let drained: Vec<ContentHash> = {
             let mut idx = self
                 .index
