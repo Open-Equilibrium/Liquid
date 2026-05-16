@@ -596,29 +596,59 @@ plus the runnable example at
 
 ### 5.5 Milestone 5 — FFI bridge (week 8–10)
 
-- [ ] Add `flutter_rust_bridge` to `liquid-sdk-bridge`
-- [ ] Annotate the public surface of `liquid-sdk-bridge` with `#[frb]`
-- [ ] Run `flutter_rust_bridge_codegen` and commit generated Dart files to
-  `app/lib/bridge/` (generated files must not be manually edited)
-- [ ] Expose the following initial FFI functions:
-  ```rust
-  pub async fn create_workspace(name: String) -> Result<WorkspaceId>;
-  pub async fn list_workspaces(principal: String) -> Result<Vec<WorkspaceSummary>>;
-  pub async fn load_page(workspace: WorkspaceId, page_id: PageId) -> Result<PageSnapshot>;
-  pub async fn write_page(workspace: WorkspaceId, page_id: PageId,
-                          snapshot: PageSnapshot, author: String,
-                          message: String) -> Result<CommitId>;
-  pub async fn check_permission(principal: String, action: String,
-                                resource: String) -> Result<bool>;
-  ```
-- [ ] Write a Dart integration test that calls each function end-to-end
+Phase-1 sequencing split this milestone into a Rust side (now
+shipped — TASK-011) and a Dart side (blocked on M6 scaffolding —
+see TASK-012). Per ADR-009 the Rust side adapts the original
+`(principal: String)` signatures to take a `token: &str` first
+argument: every bridge call must authenticate the caller, and a
+flat `principal: String` cannot prove authenticity. The Dart side
+will receive the same adaptation via `flutter_rust_bridge` codegen.
 
-**Success criterion:** Dart test creates a workspace, writes a page, reads it
-back, and the round-trip data matches. Manual validation +
-PR-review checklist:
+- [x] Implement [`BridgeServices<S, P, I, R>`] in `liquid-sdk-bridge`
+      composing `ContentStore`, `PermissionIndex`, `IdentityProvider`,
+      and the new [`WorkspaceRegistry`] trait (in-memory variant ships;
+      filesystem variant follow-up).
+- [x] Expose the five FFI entry points on `BridgeServices` (signatures
+      below). Every method validates the caller's token first
+      (collapses to `LiquidError::Forbidden` per §4.5) and — for
+      mutating / data-touching calls — runs `require_permission!`
+      before touching the inner store (Absolute Rule 4):
+  ```rust
+  pub async fn create_workspace(&self, token: &str, name: String) -> Result<WorkspaceId>;
+  pub async fn list_workspaces(&self, token: &str) -> Result<Vec<WorkspaceSummary>>;
+  pub async fn load_page(&self, token: &str, workspace: WorkspaceId, page_id: PageId)
+                         -> Result<PageSnapshot>;
+  pub async fn write_page(&self, token: &str, workspace: WorkspaceId, page_id: PageId,
+                          snapshot: PageSnapshot, message: String) -> Result<CommitId>;
+  pub async fn check_permission(&self, token: &str, principal: &str,
+                                action: Action, resource: Resource) -> Result<bool>;
+  ```
+- [x] Plan-level success criterion proven end-to-end in Rust:
+      `core/liquid-sdk-bridge/tests/m5_end_to_end.rs` wires every
+      Phase-1 crate together (auth + permissions + vcs + bridge) and
+      runs the 10 scenarios that exercise the spec contract —
+      tampered-token rejection, owner-role auto-assignment on
+      `create_workspace`, registry round-trip, list filtering,
+      page-write/page-load bytes round-trip + content-hash equality,
+      `AppViewer`-cannot-write rejection, unbound-agent cannot read,
+      and check-permission caller authentication.
+- [ ] Add `flutter_rust_bridge` dependency + `#[frb]` annotations on
+      the public surface (deferred to TASK-012).
+- [ ] Run `flutter_rust_bridge_codegen` and commit generated Dart
+      files to `app/lib/bridge/` (deferred to TASK-012, blocks on
+      M6 scaffolding `app/`).
+- [ ] Write a Dart integration test that calls each function
+      end-to-end (deferred to TASK-012, blocks on M6 scaffolding
+      `sdk/liquid_sdk/`).
+
+**Success criterion (Rust side):** the M5 end-to-end test above
+asserts that a `create_workspace → write_page → load_page` chain
+round-trips the bytes byte-for-byte and the `content_hash` matches
+`ContentHash::of_bytes(bytes)`. Manual validation:
 [`docs/manual-validation-m4-m5.md`](docs/manual-validation-m4-m5.md)
-§M5 (the section is marked PENDING and doubles as the M5-PR
-acceptance checklist until M5 lands).
+§M5 (the §M5 section now describes the Rust side as DONE and the
+Dart side as PENDING-TASK-012; the §M5.4 Dart steps stay as the
+PR-review checklist for that follow-up).
 
 ---
 
@@ -1210,13 +1240,55 @@ within the workspace VCS. Loaded on page open; re-establishes all subscriptions.
 ### `liquid-sdk-bridge`
 **Purpose:** FFI surface. Thin adapter layer only — no business logic.
 
-**Dependencies:** All other crates, `flutter_rust_bridge`
+**Dependencies:** `liquid-core`, `liquid-vcs`, `liquid-auth`,
+`liquid-permissions`, `liquid-cache`, `liquid-bindings`,
+`flutter_rust_bridge` (Dart side — pending TASK-012). Plus
+`async-trait`, `bytes`, `serde`, `uuid` for the
+`WorkspaceRegistry` + wire types.
+
+**Composition root.** [`BridgeServices<S, P, I, R>`] bundles every
+backend behind generic type params so test code can swap in
+`InMemory*` variants. All five §5.5 FFI entries are inherent
+`async fn` methods on `BridgeServices`.
+
+**Wire types** (live here, not in `liquid-core`):
+- `WorkspaceSummary { id, name, created_by, created_unix }` —
+  returned by `list_workspaces`.
+- `PageSnapshot { page_id, bytes, content_hash }` — round-tripped by
+  `load_page` / `write_page`. `content_hash` is derived from `bytes`
+  by `PageSnapshot::new` so the pair cannot be inconsistent.
+
+**`WorkspaceRegistry`** (Phase-1 trait + `InMemoryWorkspaceRegistry`)
+records workspace metadata (`id`, `name`, `created_by`,
+`created_unix`). Permissions over a workspace stay in
+`PermissionIndex`; this registry only holds the workspace's
+identity. The on-disk variant ships as a follow-up alongside
+M6.5's CLI persistence work.
 
 **Rules:**
-- Every function checks permission before doing anything else
-- Every function is `async`
-- Return types must be serialisable to Dart via `flutter_rust_bridge`
-- Generated Dart files go to `app/lib/bridge/` — commit them, never edit manually
+- Every method on `BridgeServices` validates the caller's token via
+  `IdentityProvider::validate_token` first — every auth failure
+  collapses to `LiquidError::Forbidden` per §4.5.
+- The two data-touching methods (`load_page`, `write_page`) run
+  `require_permission!` against the resolved principal next,
+  before any backend call (`CLAUDE.md` Absolute Rule 4).
+- Three methods do NOT use the `require_permission!` macro at the
+  call boundary, each for a different documented reason:
+  - `create_workspace` — Phase-1 bootstrap: the caller has no
+    binding yet (the binding is the side effect). Token
+    validation gates it; Phase 3 will add an admin / quota gate.
+  - `list_workspaces` — filters by `PermissionIndex::check` per
+    *row*, not at the call boundary; there is no single resource
+    to gate against.
+  - `check_permission` — exposes the permission query itself;
+    gating a permission *query* with `require_permission!` would
+    create a chicken-and-egg loop. Caller authentication
+    (`validate_token`) is still required.
+- `write_page` validates `snapshot.page_id == call.page_id` so a
+  caller cannot route bytes to the wrong canonical path.
+- Every function is `async`.
+- Return types must be serialisable to Dart via `flutter_rust_bridge`.
+- Generated Dart files go to `app/lib/bridge/` — commit them, never edit manually.
 
 ---
 
@@ -1765,6 +1837,9 @@ violations analyzer errors during development.
 >   (`PermissionIndex`, `IdentityProvider`).
 > - `docs/adr/003-oss-policy.md` — Pre-1.0 OSS posture; rationale for
 >   the §17 deferred-obligations approach.
+> - `docs/adr/004-bridge-token-first-arg.md` — M5 bridge composition root;
+>   `BridgeServices<S, P, I, R>` + `token: &str` first argument on every
+>   FFI entry (TASK-011).
 
 ---
 

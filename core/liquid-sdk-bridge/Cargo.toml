@@ -17,3 +17,12 @@ liquid-auth.workspace = true
 liquid-permissions.workspace = true
 liquid-cache.workspace = true
 liquid-bindings.workspace = true
+
+async-trait.workspace = true
+bytes.workspace = true
+serde.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+tempfile.workspace = true

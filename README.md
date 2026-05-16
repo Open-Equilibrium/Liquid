@@ -26,7 +26,7 @@ SDK, and reference apps land in subsequent phases.
 | **M2** VCS layer | `ContentStore` trait + `InMemory` + `Filesystem` impls | ✅ Done (jj-lib backend deferred — see [ADR-001](docs/adr/001-jujutsu-pinning.md)) |
 | **M3** Auth + permissions | `LocalIdentityProvider` (Argon2id + HMAC) + `InMemoryPermissionIndex` + `FilesystemPermissionIndex` + `require_permission!` | ✅ Done |
 | **M4** Cache layer stub | `ReadCache` trait + `InProcessCache` (`Arc<DashMap>`) + `CachedContentStore` wrapper warming on read / invalidating on write+undo | ✅ Done |
-| **M5** FFI bridge | `flutter_rust_bridge` surface | Planned |
+| **M5** FFI bridge | `BridgeServices<S,P,I,R>` + 5 token-gated FFI methods + `WorkspaceRegistry` + `PageSnapshot` / `WorkspaceSummary` wire types | ✅ Rust side done (TASK-011); Dart-side codegen + `flutter test` pending TASK-012 (blocked on M6 scaffolding `app/` + `sdk/liquid_sdk/`) |
 | **M6.5** Minimal agent CLI (gates M6 per CLAUDE.md rule 6) | `liquid workspace create`, `page read/write/undo`, `auth provision-agent/token`, `audit list` — drives the MVP slice (`tests/cli/00_mvp_slice.bats`) | Planned |
 | **M6** Flutter shell skeleton | `RootShell`, `ExplorerPanel`, `PageGrid` | Planned |
 | **M7** Full agent CLI | Rest of [§12](IMPLEMENTATION_PLAN.md#12-agent-cli-specification): `workspace list/delete`, `page history`, `auth login/whoami`, `app …` | Planned |

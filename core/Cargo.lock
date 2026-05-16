@@ -387,12 +387,18 @@ dependencies = [
 name = "liquid-sdk-bridge"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "bytes",
  "liquid-auth",
  "liquid-bindings",
  "liquid-cache",
  "liquid-core",
  "liquid-permissions",
  "liquid-vcs",
+ "serde",
+ "tempfile",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
