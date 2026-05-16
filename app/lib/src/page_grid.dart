@@ -176,7 +176,10 @@ class _PositionedGridItem extends StatelessWidget {
             child: Container(
               margin: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: item.color.withOpacity(0.18),
+                // ~0.18 alpha — Color.withOpacity is deprecated in
+                // Flutter 3.27+; withAlpha is the stable cross-version
+                // replacement that keeps integer alpha precision.
+                color: item.color.withAlpha(46),
                 border: Border.all(color: item.color, width: 1),
                 borderRadius: BorderRadius.circular(8),
               ),

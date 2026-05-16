@@ -119,10 +119,13 @@ pub async fn history(
     require_permission!(perms, principal, Action::Read, Resource::Page(page_id));
 
     let store_path = parse_store_path(user_path)?;
-    let log = services
-        .store
-        .operation_log(workspace, usize::max(limit, 1))
-        .await?;
+    // Fetch the entire op log and apply the `path` filter + `limit`
+    // in-CLI. `operation_log`'s `limit` is a *prefix* cap, not a
+    // per-path cap — feeding it `limit` directly would silently
+    // under-return matches for a path that lives further back in
+    // the log than `limit` entries. Phase 1 keeps this O(N) per
+    // call; a per-path cursor lands with the Phase-4 paged log API.
+    let log = services.store.operation_log(workspace, usize::MAX).await?;
     let mut records: Vec<serde_json::Value> = Vec::new();
     for op in log {
         let matches_path = match &op.kind {

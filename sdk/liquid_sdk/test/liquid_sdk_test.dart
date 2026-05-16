@@ -92,6 +92,33 @@ void main() {
       expect(const SlotValue.str('a'), const SlotValue.str('a'));
       expect(const SlotValue.str('a') == const SlotValue.str('b'), isFalse);
     });
+
+    test('json equality is structural, not identity', () {
+      const a = SlotValue.json(<String, Object>{
+        'k': 1,
+        'nested': <int>[1, 2, 3],
+      });
+      const b = SlotValue.json(<String, Object>{
+        'k': 1,
+        'nested': <int>[1, 2, 3],
+      });
+      const c = SlotValue.json(<String, Object>{
+        'k': 1,
+        'nested': <int>[1, 2, 4],
+      });
+      expect(a, b,
+          reason: 'two json values with deep-equal content must be ==');
+      expect(a.hashCode, b.hashCode, reason: 'hashCode must agree with ==');
+      expect(a == c, isFalse, reason: 'differing leaf must break equality');
+    });
+
+    test('bytes equality is structural', () {
+      const a = SlotValue.bytes(<int>[1, 2, 3]);
+      const b = SlotValue.bytes(<int>[1, 2, 3]);
+      const c = SlotValue.bytes(<int>[1, 2, 4]);
+      expect(a, b);
+      expect(a == c, isFalse);
+    });
   });
 
   group('AppManifest', () {

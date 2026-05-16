@@ -144,6 +144,48 @@ publish` deferred to TASK-014 (planned, blocked on M8 —
 `AppManifest`). The §5.8 spec checkboxes for those rows stay
 unticked with an inline pointer.
 
+### Fixed — Post-M6-M9 audit (PR #18 review pass)
+
+- `sdk/liquid_sdk/lib/src/slot.dart`: `SlotValue.json` equality is
+  now structural (`DeepCollectionEquality` from `package:collection`)
+  instead of identity-based. The bug meant two `SlotValue.json` values
+  with deep-equal `Map` / `List` contents compared unequal, which
+  would have silently broken any caller using them as map keys, in
+  `Set` membership, or in equality-based cache lookups. Test coverage
+  added for both `json` and `bytes` structural equality.
+- `core/liquid-bindings/src/broker.rs`: `Mutex` poison now propagates
+  via `LiquidError::InvalidInput` (matches `liquid-auth`,
+  `liquid-permissions`, and `liquid-vcs`) instead of silently
+  continuing with poisoned state. Added multi-hop cycle detection to
+  `wire` + `load_bindings`: A→B + B→A and equivalent multi-hop
+  topologies now return `InvalidInput`, so the upcoming wiring UI
+  cannot persist a graph that closes a cycle.
+- `core/liquid-cli/src/cmd/page.rs`: `page history --limit N` is now
+  a per-path cap (N matching writes) rather than a prefix cap on the
+  op log. The previous behaviour silently under-returned matches when
+  unrelated writes dominated the recent log; the spec entry in
+  `IMPLEMENTATION_PLAN.md §12` documents the per-path cap semantics
+  and the Phase-1 O(N) cost. Regression test added.
+- `tests/cli/11_m7_full_cli.bats`: three new regressions — duplicate
+  `auth login --register` rejects with `InvalidInput`; ambiguous
+  `--as <name>` rejects with `InvalidInput` and points at the
+  principal-form for disambiguation; `page history` with a `--limit`
+  larger than the number of matching writes returns only the
+  matching writes (no false-positive entries from sibling paths).
+- `app/lib/src/state.dart`: the doc comment claiming a typedef-only
+  swap from `StateProvider` to `AsyncNotifierProvider` was misleading
+  (consumer widgets would also change). Comment now describes the
+  real (small) widget-side change that TASK-012 will require.
+- `app/lib/src/page_grid.dart`: replaced deprecated `Color.withOpacity`
+  with `withAlpha`, preventing an analyzer warning once the Flutter
+  SDK rolls past 3.27.
+- `.github/workflows/ci.yml`: the `Flutter app` matrix is shrunk to
+  `linux` — M6's success criterion is "App launches on Linux" and
+  this branch ships no scaffolding under `app/{android,ios,macos,
+  windows}`. TASK-018 tracks the re-expansion. `dart format`
+  failures and an `IMPLEMENTATION_PLAN.md §6`-aware `sync-docs`
+  fix complete the CI green-lighting.
+
 ### Fixed — codecov patch coverage on M6.5 (TASK-008 follow-up)
 
 - `core/liquid-sdk-bridge/src/registry.rs`: added

@@ -2,7 +2,10 @@
 /// the Rust side (`IMPLEMENTATION_PLAN.md` §6.1 / §13).
 library;
 
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+
+const _jsonEq = DeepCollectionEquality();
 
 /// Discriminated union over the value a slot can carry.
 ///
@@ -113,9 +116,10 @@ class _Json extends SlotValue {
   }) =>
       json(value);
   @override
-  bool operator ==(Object other) => other is _Json && other.value == value;
+  bool operator ==(Object other) =>
+      other is _Json && _jsonEq.equals(other.value, value);
   @override
-  int get hashCode => value.hashCode;
+  int get hashCode => _jsonEq.hash(value);
   @override
   String toString() => 'SlotValue.json($value)';
 }

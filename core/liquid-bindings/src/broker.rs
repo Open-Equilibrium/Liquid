@@ -113,26 +113,51 @@ impl InProcessSlotBroker {
         Self::default()
     }
 
-    fn lock(&self) -> MutexGuard<'_, BrokerState> {
-        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    /// Acquire the broker state lock, surfacing poison as
+    /// `LiquidError::InvalidInput` — matches `liquid-auth`,
+    /// `liquid-permissions`, and `liquid-vcs` so a panicked thread
+    /// cannot silently corrupt downstream state.
+    fn lock(&self) -> Result<MutexGuard<'_, BrokerState>> {
+        self.state.lock().map_err(poisoned)
     }
 
     /// Return (or create) the broadcast `Sender` for `slot`.
     /// Subscribers added later see future publishes; tokio's
     /// `broadcast` does not replay historical messages.
-    fn sender_for(&self, slot: &SlotName) -> broadcast::Sender<SlotValue> {
-        let mut g = self.lock();
-        g.senders
+    fn sender_for(&self, slot: &SlotName) -> Result<broadcast::Sender<SlotValue>> {
+        let mut g = self.lock()?;
+        Ok(g.senders
             .entry(slot.clone())
             .or_insert_with(|| broadcast::channel(SLOT_BUFFER_SIZE).0)
-            .clone()
+            .clone())
     }
+
+    /// Reject a candidate wire that would close a cycle through the
+    /// existing wiring set. Direct self-loops (`from == to`) are
+    /// handled by the caller; this covers multi-hop cycles like
+    /// `A → B` plus a new `B → A`.
+    fn would_form_cycle(wires: &[SlotWiring], candidate: &SlotWiring) -> bool {
+        let mut frontier: Vec<&SlotName> = vec![&candidate.to];
+        while let Some(node) = frontier.pop() {
+            if node == &candidate.from {
+                return true;
+            }
+            for w in wires.iter().filter(|w| &w.from == node) {
+                frontier.push(&w.to);
+            }
+        }
+        false
+    }
+}
+
+fn poisoned<T>(_: PoisonError<T>) -> LiquidError {
+    LiquidError::InvalidInput("slot broker state lock poisoned".into())
 }
 
 #[async_trait]
 impl SlotBroker for InProcessSlotBroker {
     async fn publish(&self, slot: SlotName, value: SlotValue) -> Result<usize> {
-        let sender = self.sender_for(&slot);
+        let sender = self.sender_for(&slot)?;
         // `broadcast::Sender::send` returns `Err(SendError(v))`
         // when there are no active receivers; that is normal +
         // not a project error — surface 0.
@@ -142,7 +167,7 @@ impl SlotBroker for InProcessSlotBroker {
         // list under the lock so the broker doesn't deadlock if
         // a downstream `publish` recurses.
         let wires: Vec<SlotWiring> = self
-            .lock()
+            .lock()?
             .wires
             .iter()
             .filter(|w| w.from == slot)
@@ -150,14 +175,14 @@ impl SlotBroker for InProcessSlotBroker {
             .collect();
         let mut downstream: usize = 0;
         for w in wires {
-            let s = self.sender_for(&w.to);
+            let s = self.sender_for(&w.to)?;
             downstream = downstream.saturating_add(s.send(value.clone()).unwrap_or(0));
         }
         Ok(direct.saturating_add(downstream))
     }
 
     async fn subscribe(&self, slot: SlotName) -> Result<broadcast::Receiver<SlotValue>> {
-        Ok(self.sender_for(&slot).subscribe())
+        Ok(self.sender_for(&slot)?.subscribe())
     }
 
     async fn wire(&self, wiring: SlotWiring) -> Result<()> {
@@ -167,10 +192,17 @@ impl SlotBroker for InProcessSlotBroker {
                 wiring.from
             )));
         }
-        let mut g = self.lock();
-        if !g.wires.contains(&wiring) {
-            g.wires.push(wiring);
+        let mut g = self.lock()?;
+        if g.wires.contains(&wiring) {
+            return Ok(());
         }
+        if Self::would_form_cycle(&g.wires, &wiring) {
+            return Err(LiquidError::InvalidInput(format!(
+                "wiring would form a cycle: {} → {}",
+                wiring.from, wiring.to
+            )));
+        }
+        g.wires.push(wiring);
         Ok(())
     }
 
@@ -185,13 +217,26 @@ impl SlotBroker for InProcessSlotBroker {
                 )));
             }
         }
-        let mut g = self.lock();
+        // Reject documents whose wires close a cycle as well, so
+        // the on-disk shape stays consistent with what `wire`
+        // accepts at runtime.
+        let mut seen: Vec<SlotWiring> = Vec::with_capacity(doc.wires.len());
+        for w in &doc.wires {
+            if Self::would_form_cycle(&seen, w) {
+                return Err(LiquidError::InvalidInput(format!(
+                    "bindings document closes a cycle at {} → {}",
+                    w.from, w.to
+                )));
+            }
+            seen.push(w.clone());
+        }
+        let mut g = self.lock()?;
         g.wires = doc.wires;
         Ok(())
     }
 
     async fn save_bindings(&self) -> Result<BindingsDocument> {
-        let g = self.lock();
+        let g = self.lock()?;
         Ok(BindingsDocument {
             wires: g.wires.clone(),
         })
@@ -352,6 +397,46 @@ mod tests {
             .expect("timeout")
             .expect("recv");
         assert_eq!(got, SlotValue::Num(7.0));
+    }
+
+    #[tokio::test]
+    async fn wire_rejects_multi_hop_cycle() {
+        let b = InProcessSlotBroker::new();
+        b.wire(SlotWiring {
+            from: slot("a:out"),
+            to: slot("b:in"),
+        })
+        .await
+        .expect("first wire ok");
+        let err = b
+            .wire(SlotWiring {
+                from: slot("b:in"),
+                to: slot("a:out"),
+            })
+            .await
+            .expect_err("second wire would close a cycle");
+        assert!(matches!(err, LiquidError::InvalidInput(_)));
+        let doc = b.save_bindings().await.expect("save");
+        assert_eq!(doc.wires.len(), 1, "cycle must not be persisted");
+    }
+
+    #[tokio::test]
+    async fn load_bindings_rejects_multi_hop_cycle() {
+        let b = InProcessSlotBroker::new();
+        let bad = BindingsDocument {
+            wires: vec![
+                SlotWiring {
+                    from: slot("a:out"),
+                    to: slot("b:in"),
+                },
+                SlotWiring {
+                    from: slot("b:in"),
+                    to: slot("a:out"),
+                },
+            ],
+        };
+        let err = b.load_bindings(bad).await.expect_err("must reject");
+        assert!(matches!(err, LiquidError::InvalidInput(_)));
     }
 
     #[tokio::test]

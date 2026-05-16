@@ -90,6 +90,22 @@ from the workspace owner's password via Argon2id (never stored
 on disk). UI form generated from the app's
 `TenantConfigSchema.jsonSchema` (already declared in the M8 SDK).
 
+### [TASK-019] Implement `sdk/liquid_sdk_lint` custom-lint package
+
+**Phase:** 2
+**Milestone:** M8 follow-up (`IMPLEMENTATION_PLAN.md §6.1`)
+**Status:** Planned
+**Blocked by:** None (depends only on the existing `sdk/liquid_sdk/`).
+
+**What.** CLAUDE.md Absolute Rules 2 and 3 currently lean on two
+custom Dart lints (`no_platform_imports`, `no_cross_component_reference`)
+that are documented but not implemented. Implement them as a sibling
+package `sdk/liquid_sdk_lint/` exporting both rules via
+`custom_lint_builder`, wire them into `analysis_options.yaml` for
+`app/`, `sdk/liquid_sdk/`, and every `apps/*/` package, and add a
+CI step that runs `dart run custom_lint`. Until this task lands, the
+two rules are advisory-by-convention only.
+
 ### [TASK-018] Re-enable multi-platform Flutter CI matrix
 
 **Phase:** 4 (mobile + cross-platform polish)

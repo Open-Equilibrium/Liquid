@@ -125,6 +125,29 @@ teardown() {
   [ "$count" -eq 3 ]
 }
 
+@test "page history with --limit > matches returns all path-matching writes only" {
+  # Regression for the audit's MT4: when other paths dominate the op
+  # log, the --limit cap on the target path must apply per-path, not
+  # as a prefix cap on the log. We mix 5 writes to /pages/target with
+  # 5 writes to /pages/noise and ask for --limit 20: we must get 5.
+  ws=$(liquid --format json workspace create demo | jq -r .data.workspace_id)
+  export LIQUID_TOKEN=$(liquid --format json auth provision-agent w \
+    --workspace "$ws" --role WorkspaceMember | jq -r .data.token)
+  for i in 1 2 3 4 5; do
+    liquid --format json page write /pages/target --workspace "$ws" --data "{\"v\":$i}" >/dev/null
+    liquid --format json page write /pages/noise --workspace "$ws" --data "{\"v\":$i}" >/dev/null
+  done
+  run liquid --format json page history /pages/target --workspace "$ws" --limit 20
+  [ "$status" -eq 0 ]
+  count=$(echo "$output" | wc -l)
+  [ "$count" -eq 5 ]
+  # Every returned record points at /pages/target — no /pages/noise
+  # entries leaked through the filter.
+  for path in $(echo "$output" | jq -r '.path'); do
+    [ "$path" = "/pages/target" ]
+  done
+}
+
 # ── auth login ───────────────────────────────────────────────────────────
 
 @test "auth login non-interactive flags issue a token for an existing user" {
@@ -139,6 +162,19 @@ teardown() {
   [[ "$token" =~ ^u:[0-9a-f-]+\.[0-9]+\.[0-9a-f]+$ ]]
   # Token file written, equals the printed token.
   [ "$(cat $LIQUID_HOME/token)" = "$token" ]
+}
+
+@test "auth login --register rejects a duplicate username with InvalidInput" {
+  # Regression for the audit's MT2: a second --register with an
+  # already-claimed username must not silently overwrite the first
+  # user's credentials. InvalidInput maps to exit 2 (EX_USAGE) per
+  # `output::exit_code_for`.
+  liquid --format json workspace create demo >/dev/null
+  liquid --format json auth login --username carol --password 'first-pw' --register >/dev/null
+  run liquid --format json auth login --username carol --password 'second-pw' --register
+  [ "$status" -eq 2 ]
+  err=$(echo "$output" | jq -r '.error')
+  [[ "$err" =~ already[[:space:]]+registered ]]
 }
 
 @test "auth login rejects wrong password with Forbidden" {
@@ -195,4 +231,24 @@ teardown() {
   run liquid --format json --as "nonexistent-bot" workspace list
   [ "$status" -eq 1 ]
   [[ "$(echo "$output" | jq -r '.error')" =~ [Nn]ot[[:space:]]+[Ff]ound ]]
+}
+
+@test "--as rejects an ambiguous name with InvalidInput pointing at the principal-form" {
+  # Regression for the audit's MT3: when two agents share a name
+  # across workspaces, --as must refuse with InvalidInput (exit 2,
+  # EX_USAGE) and tell the caller to use the principal-form
+  # (a:<uuid>) to disambiguate. The error message is in the
+  # envelope's `error` field, not a separate `message`.
+  ws1=$(liquid --format json workspace create alpha | jq -r .data.workspace_id)
+  ws2=$(liquid --format json workspace create beta | jq -r .data.workspace_id)
+  liquid --format json auth provision-agent dup \
+    --workspace "$ws1" --role WorkspaceMember >/dev/null
+  liquid --format json auth provision-agent dup \
+    --workspace "$ws2" --role WorkspaceMember >/dev/null
+  run liquid --format json --as "dup" workspace list
+  [ "$status" -eq 2 ]
+  err=$(echo "$output" | jq -r '.error')
+  [[ "$err" =~ multiple[[:space:]]+agents ]]
+  # The error message guides the caller to disambiguate with a:<uuid>.
+  [[ "$err" =~ a:\<uuid\> ]] || [[ "$err" =~ a: ]]
 }

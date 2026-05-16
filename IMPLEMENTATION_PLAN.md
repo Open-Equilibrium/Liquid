@@ -86,27 +86,31 @@ liquid/
 ├── app/                           # Flutter application
 │   ├── pubspec.yaml
 │   ├── lib/
-│   │   ├── main.dart
-│   │   ├── bridge/                # generated flutter_rust_bridge bindings (do not edit)
-│   │   ├── shell/                 # WorkspaceSwitcher, RootShell layout
-│   │   ├── explorer/              # ExplorerPanel, PageTree, AppInstanceList
-│   │   ├── grid/                  # PageGrid, GridCell, GridItem
-│   │   ├── pages/                 # Page model, PageView
-│   │   ├── bindings/              # Dart-side data binding wiring UI
-│   │   └── state/                 # Riverpod providers (UI state only)
+│   │   ├── main.dart              # `LiquidApp` entry + ProviderScope
+│   │   └── src/                   # flat src/ until file count > 12
+│   │       ├── state.dart         # Riverpod providers (UI state only)
+│   │       ├── root_shell.dart    # `RootShell` (workspace switcher + split)
+│   │       ├── explorer_panel.dart # `ExplorerPanel`
+│   │       ├── page_area.dart     # `PageArea` (toolbar)
+│   │       └── page_grid.dart     # `PageGrid` + `GridItem`
+│   │     # bridge/, bindings/ subdirs land alongside TASK-012
+│   │     # (flutter_rust_bridge codegen) + TASK-016b (wiring UI).
 │   └── test/
 │
 ├── sdk/                           # Public Dart package for app developers
 │   └── liquid_sdk/
 │       ├── pubspec.yaml
 │       └── lib/
-│           ├── manifest.dart      # AppManifest, ComponentManifest
-│           ├── component.dart     # LiquidComponent base class
-│           ├── slots.dart         # InputSlot, OutputSlot, SlotSchema
-│           ├── grid.dart          # GridConstraints, GridApi
-│           ├── vcs.dart           # VcsApi
-│           ├── permissions.dart   # PermissionApi
-│           └── extensions.dart    # ExtensionPoint, ExtensionApi
+│           ├── liquid_sdk.dart    # public re-exports (barrel)
+│           └── src/
+│               ├── manifest.dart  # AppManifest, ComponentManifest,
+│               │                  # Permission, ManifestAction,
+│               │                  # TenantConfigSchema, CliCommandDeclaration
+│               ├── component.dart # GridConstraints, LiquidComponent
+│               ├── slot.dart      # sealed SlotValue, SlotKind,
+│               │                  # SlotSchema, InputSlot, OutputSlot
+│               └── runtime_apis.dart # GridApi, VcsApi, HistoryEntry,
+│                                  # PermissionApi, SlotEmitter, SlotConsumer
 │
 ├── registry/                      # Self-hosted package registry (Rust)
 │   └── liquid-registry/
@@ -786,7 +790,11 @@ The remainder of the §12 surface, layered on top of M6.5:
       registry-strict Admin check fires before the registry lookup
       so unknown ids surface as `Forbidden` (anti-enumeration —
       §4.5).
-- [x] `liquid page history <page-path>` (paginated via `--limit`).
+- [x] `liquid page history <page-path>` — `--limit N` is a *per-path*
+      cap on the records returned, not a prefix cap on the op log.
+      Phase-1 walks the full log for the workspace and keeps the most
+      recent N writes that touch the target path; a per-path cursor
+      lands with the Phase-4 paged log API.
 - [x] `liquid auth login --username <u> --password <p> [--register]`
       — non-interactive (interactive prompt deferred to a follow-up
       to keep the M7 surface scriptable). Persists token to

@@ -1,9 +1,13 @@
 /// Phase-2 in-memory state stubs for the M6 shell.
 ///
 /// Real workspace + page state arrives via the FFI bridge
-/// (TASK-012). These notifiers match the eventual `AsyncNotifier`
-/// shape so swapping in the FFI impl later is a typedef change,
-/// not a widget rewrite.
+/// (TASK-012). The Phase-2 stub deliberately uses [StateProvider]
+/// because there is nothing async to await — the demo workspaces
+/// are a `const` list. TASK-012 will swap each `StateProvider` here
+/// for an [AsyncNotifierProvider] (per `IMPLEMENTATION_PLAN.md`
+/// §5.7) and the consumer widgets will at the same time switch from
+/// `ref.watch(...) -> T` to `ref.watch(...) -> AsyncValue<T>`. This
+/// is a real (small) widget-side change, not a typedef-only swap.
 
 library;
 
