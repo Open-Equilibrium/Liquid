@@ -165,12 +165,15 @@ These cannot be overridden by task descriptions or user shortcuts.
 ## First-Time Setup (run once after cloning)
 
 ```sh
-npm install -g @evilmartians/lefthook   # if not already installed
-lefthook install                        # wires git hooks from lefthook.yml
+./scripts/setup-tooling.sh && lefthook install
 ```
 
-Hooks run automatically on every commit (`pre-commit`, `commit-msg`) and push
-(`pre-push`). They skip layers whose code does not exist yet.
+`scripts/setup-tooling.sh` is the single source of truth for the
+developer toolchain (`cargo-deny`, `cargo-tarpaulin`, `just`, `bats`,
+`lefthook`); it is idempotent. `lefthook install` wires git hooks from
+`lefthook.yml`. Hooks run automatically on every commit (`pre-commit`,
+`commit-msg`) and push (`pre-push`); they skip layers whose code does
+not exist yet.
 
 ## Daily Commands (`just`)
 
