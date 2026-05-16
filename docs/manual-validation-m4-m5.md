@@ -294,11 +294,13 @@ Phase 3 will add an admin gate).
 inside an `if let Some(...)` / `match` arm, is a Rule-4
 violation. Reject the PR with a citation back to ADR-004.
 
-### Step M5.3 — Rust-side end-to-end + lints
+### Step M5.3 — Rust-side end-to-end + walkthrough + lints
 
 ```sh
 cargo test --manifest-path core/Cargo.toml -p liquid-sdk-bridge \
   2>&1 | .claude/hooks/filter-test-output.sh
+cargo run --manifest-path core/Cargo.toml -p liquid-sdk-bridge \
+  --example m5_walkthrough
 cargo clippy --manifest-path core/Cargo.toml -p liquid-sdk-bridge \
   --all-targets --locked -- -D warnings \
   2>&1 | .claude/hooks/filter-test-output.sh
@@ -317,6 +319,14 @@ cargo clippy --manifest-path core/Cargo.toml -p liquid-sdk-bridge \
   `AppViewer`-cannot-write rejection, unbound-agent-cannot-read,
   `check_permission` caller-authentication, and malformed
   query-subject rejection.
+
+The walkthrough should print a 9-line matrix ending in
+`M5 walkthrough OK` and exit 0. It exercises the same surface as
+the integration test but against the durable backends
+(`FilesystemContentStore` + `FilesystemPermissionIndex` +
+`LocalIdentityProvider`); on-disk artifacts live under
+`${TMPDIR:-/tmp}/liquid-m5-walkthrough/`. Clean up with
+`just clean-walkthroughs`.
 
 Clippy is clean (`-D warnings` includes the workspace
 `unwrap_used` / `expect_used` / `panic` warnings — the bridge has
