@@ -178,15 +178,19 @@ not exist yet.
 ## Daily Commands (`just`)
 
 ```sh
-just test          # run all tests (Rust + Flutter + SDK + CLI)
-just lint          # run all linters
-just fmt           # auto-fix all formatting
-just build-all     # flutter build for all 5 platforms
-just run           # flutter run -d linux
-just cli -- --help # run the liquid CLI
-just services-up   # start Redis / Redpanda via Docker Compose (Phase 3+)
-just check         # full pre-push validation (lint → test → deny-check)
-just ai-check      # validate repo-local .claude/ configuration
+just test                 # run all tests (Rust + Flutter + SDK + CLI)
+just lint                 # run all linters
+just fmt                  # auto-fix all formatting
+just build-all            # flutter build for all 5 platforms
+just run                  # flutter run -d linux
+just cli -- --help        # run the liquid CLI
+just services-up          # start Redis / Redpanda via Docker Compose (Phase 3+)
+just check                # full pre-push validation (lint → test → deny-check → coverage-check)
+just check-ci             # reproduce the .github/workflows/ci.yml Rust matrix job locally
+just coverage-check       # cargo-tarpaulin gate, fails under 80% line coverage
+just clean                # remove every coverage report + walkthrough scratch dir
+just clean-walkthroughs   # only the /tmp/liquid-m*-walkthrough scratch dirs
+just ai-check             # validate repo-local .claude/ configuration
 ```
 
 ### Filtered variants (default for cloud / agent sessions)

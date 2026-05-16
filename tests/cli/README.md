@@ -28,16 +28,29 @@ that:
 
 Concretely, **a green `bats tests/cli/` run today proves the suite is
 syntactically valid and that no test panics; it does NOT prove the
-CLI itself behaves correctly.** Until M6.5, the only files that
-actually exercise live code are:
+`liquid` CLI itself behaves correctly.** Until M6.5,
+`00_mvp_slice.bats` is the only `skip`-guarded specification waiting
+on the future `liquid` command surface.
 
-- `01_branch_name_gate.bats` — exercises
-  `scripts/check-branch-name.sh` (the pre-push branch-name gate). This
-  test is **live**: removing the `skip` was never there, and a
-  regression in the gate fails the suite.
+The remaining suites cover the project's *agent-tooling* surface and
+are **live today** — a regression in any of them fails the suite:
 
-Every other `.bats` file in this directory should be treated as a
-specification until M6.5 closes.
+- `01_branch_name_gate.bats` — `scripts/check-branch-name.sh`
+  (pre-push branch-name gate).
+- `02_bump_version.bats` — `scripts/bump-version.sh`.
+- `03_pre_commit_review_hook.bats` —
+  `.claude/hooks/pre-commit-review.sh`.
+- `04_changelog_gate.bats` — `.lefthook/commit-msg/check-changelog.sh`.
+- `05_gh_job_log.bats` — `.claude/scripts/gh-job-log`.
+- `06_coverage_recipes.bats` — `just coverage-check` / `just check-ci`.
+- `07_setup_tooling.bats` — `scripts/setup-tooling.sh`.
+- `08_clean_recipes.bats` — `just clean` / `just clean-walkthroughs`
+  plus the M2 / M3 walkthrough refactors.
+- `09_session_start_hook.bats` — `.claude/hooks/session-start.sh`.
+
+Treat `00_mvp_slice.bats` (and any future test that ships behind a
+`skip "pending M6.5"`) as specification; everything else here is
+already part of the live gate.
 
 ## How to be honest about coverage in PRs
 
