@@ -32,9 +32,9 @@
 //!    `FilesystemPermissionIndex` proves disk-persisted role bindings
 //!    survive a fresh process (re-opens the same root and re-runs the
 //!    checks).
-//! 6. Tampered tokens, expired tokens, and unknown signing keys all
-//!    collapse to `LiquidError::Forbidden` (no mode-leak — Absolute
-//!    Rule from §4.5).
+//! 6. Tampered, malformed, expired, and wrong-signing-key tokens
+//!    all collapse to `LiquidError::Forbidden` (no mode-leak —
+//!    Absolute Rule from §4.5).
 //!
 //! On-disk artifacts are kept under `/tmp/liquid-m3-walkthrough/` for
 //! human inspection after the run. Exit 0 ⇒ M3 still satisfies its
@@ -42,8 +42,10 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use std::time::Duration;
+
 use liquid_auth::{IdentityProvider, LocalIdentityProvider};
-use liquid_core::{Action, AppInstanceId, LiquidError, PrincipalId, Resource, Result, WorkspaceId};
+use liquid_core::{Action, AppInstanceId, LiquidError, Resource, Result, WorkspaceId};
 use liquid_permissions::{
     require_permission, BuiltInRole, FilesystemPermissionIndex, InMemoryPermissionIndex,
     PermissionIndex,
@@ -254,7 +256,24 @@ async fn main() {
         auth.validate_token(malformed).await.map(|_| ()),
         "malformed token",
     );
-    println!("  token negatives: tampered=Forbidden  wrong-key=Forbidden  malformed=Forbidden");
+    // Expired: issue a token from a provider configured with a
+    // zero-second lifetime so the token is already past `expires_unix`
+    // by the time `validate_token` runs. Same secret as the main
+    // provider, so the HMAC matches; only the expiry field fails.
+    let short_lived = LocalIdentityProvider::new(&auth_root, SECRET)
+        .expect("short-lived provider")
+        .with_token_lifetime(Duration::from_secs(0));
+    let expired_token = short_lived.issue_token(owner).await.expect("issue expired");
+    // Real-world clocks may issue the token in the same second it is
+    // validated; sleep a beat so `expires_unix < now` for sure.
+    std::thread::sleep(Duration::from_secs(1));
+    assert_forbidden(
+        auth.validate_token(&expired_token).await.map(|_| ()),
+        "expired token",
+    );
+    println!(
+        "  token negatives: tampered=Forbidden  wrong-key=Forbidden  malformed=Forbidden  expired=Forbidden"
+    );
 
     // ── (7) on-disk inspection hints ────────────────────────────────────
     let users_path = auth.users_path();
@@ -277,9 +296,3 @@ fn assert_forbidden(result: Result<()>, label: &str) {
         Ok(()) => panic!("{label}: expected Forbidden, got Ok(())"),
     }
 }
-
-// ── Imports that downstream readers may want for their own
-// experiments. Kept under a `#[allow(dead_code)]` so the example
-// compiles even if a reader removes a call.
-#[allow(dead_code)]
-fn _ensure_principalid_in_scope(_: PrincipalId) {}

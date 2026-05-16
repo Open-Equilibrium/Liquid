@@ -469,7 +469,7 @@ durable disk-backed variants for both sides — `LocalIdentityProvider`
 writes `users.toml` / `agents.toml`; `FilesystemPermissionIndex`
 (TASK-007) writes one `permissions.toml` per workspace under
 `<root>/workspaces/<id>/`. Manual validation: see
-[`docs/manual-validation-m1-m3.md`](manual-validation-m1-m3.md)
+[`docs/manual-validation-m1-m3.md`](docs/manual-validation-m1-m3.md)
 and the runnable examples under `core/liquid-vcs/examples/` +
 `core/liquid-permissions/examples/`.
 

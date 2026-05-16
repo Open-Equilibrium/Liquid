@@ -77,8 +77,9 @@ cargo test -p liquid-core --manifest-path core/Cargo.toml \
   2>&1 | .claude/hooks/filter-test-output.sh
 ```
 
-**Expected:** "26 passed; 0 failed; 0 ignored" on the test summary
-line. The filter hook captures the raw log under
+**Expected:** a single test-result summary line — `26 passed; 0
+failed; 0 ignored` (plus the trailing `0 passed` line for doctests
+when none exist). The filter hook captures the raw log under
 `.ai/artifacts/logs/raw-<ts>.log` and prints a compact summary;
 the suite covers ID construction, equality, serde round-trips,
 `StorePath` rejection of `..` / absolute / empty paths, and
@@ -159,11 +160,15 @@ cargo test -p liquid-vcs --manifest-path core/Cargo.toml \
   2>&1 | .claude/hooks/filter-test-output.sh
 ```
 
-**Expected:** "26 passed; 0 failed". Includes the M2 plan-level
-success criterion test (create → write three → read back → undo →
-NotFound) against both backends, plus the durability test that
-re-opens the same `FilesystemContentStore` root in a fresh struct
-and reads the data back.
+**Expected:** two test-result summary lines totalling 26 passed
+across the two suites — `14 passed` (filesystem integration tests
+in `core/liquid-vcs/tests/filesystem_store.rs`) and `12 passed`
+(in-memory unit tests in `core/liquid-vcs/src/in_memory.rs`).
+Doc-tests print an additional `0 passed`. Together the suites
+cover the M2 plan-level success criterion (create → write three →
+read back → undo → NotFound) against both backends, plus the
+durability test that re-opens the same `FilesystemContentStore`
+root in a fresh struct and reads the data back.
 
 ### Step M2.2 — Walkthrough example (recommended)
 
@@ -318,7 +323,7 @@ M3 walkthrough — auth + permissions
   in-memory matrix: viewer write=Forbidden  editor write=OK  owner read+write=OK  viewer read=OK
   --- FilesystemPermissionIndex (durable) ---
   fs matrix after reopen: viewer write=Forbidden  editor write=OK  owner write=OK
-  token negatives: tampered=Forbidden  wrong-key=Forbidden  malformed=Forbidden
+  token negatives: tampered=Forbidden  wrong-key=Forbidden  malformed=Forbidden  expired=Forbidden
 
 M3 walkthrough OK
 Inspect the on-disk state:
@@ -336,43 +341,66 @@ disk-persistence acceptance from TASK-007.
 # Argon2id-hashed user credentials (§5.3 + §9 liquid-auth layout).
 cat /tmp/liquid-m3-walkthrough/auth/users.toml
 # Expected structure (one entry per registered user):
-#   [[user]]
-#   id        = "<uuid>"
-#   username  = "alice"
-#   pw_hash   = "$argon2id$v=19$m=...$..."
-# Verify pw_hash starts with "$argon2id$"; ANY plaintext password is
-# a security regression.
+#   [[users]]
+#   id            = "<uuid>"
+#   username      = "alice"
+#   password_hash = "$argon2id$v=19$m=...$..."
+# Verify password_hash starts with "$argon2id$"; ANY plaintext
+# password is a security regression.
 
 cat /tmp/liquid-m3-walkthrough/auth/agents.toml
 # Expected structure:
-#   [[agent]]
-#   id              = "<uuid>"
-#   name            = "viewer-bot"
-#   workspace       = "<workspace-uuid>"
-#   authorized_by   = "<owner-uuid>"
-#   created_unix_millis = <int>
+#   [[agents]]
+#   id            = "<uuid>"
+#   name          = "viewer-bot"
+#   workspace_id  = "<workspace-uuid>"
+#   authorized_by = "user:<owner-uuid>"      # principal_to_string
+#   created_unix  = <unix seconds>
 # Verify every agent records who authorised it; missing
-# `authorized_by` = audit hole.
+# `authorized_by` = audit hole. The `user:` / `agent:` prefix in
+# `authorized_by` is mandatory — a bare UUID indicates a
+# regression in `principal_to_string`.
 
 PERM_FILE=$(ls /tmp/liquid-m3-walkthrough/perm/workspaces/*/permissions.toml)
 cat "$PERM_FILE"
-# Expected structure (per TASK-007 + §9):
-#   [[binding]]
-#   principal = "<uuid>"
-#   role      = "WorkspaceOwner" | "WorkspaceMember" | "AppViewer" | ...
-#   scope     = "<resource-uri>"        (omitted for workspace-wide roles)
+# Expected structure (per TASK-007 + §9). PrincipalId and Resource
+# are adjacently-tagged enums, so they serialise as TOML inline
+# tables, not strings:
+#
+#   [[bindings]]
+#   role = "workspace_owner"                # serde rename_all = "snake_case"
+#
+#   [bindings.principal]
+#   kind = "user"                           # or "agent"
+#   id   = "<uuid>"
+#
+#   [[bindings]]
+#   role = "app_viewer"                     # or "app_editor", "agent", "workspace_member"
+#
+#   [bindings.principal]
+#   kind = "agent"
+#   id   = "<uuid>"
+#
+#   [bindings.scope]                        # omitted for workspace-wide roles
+#   kind = "app_instance"                   # or "workspace", "component", "page", "field"
+#   id   = "<uuid>"
 ```
 
 **Regression shape:**
 
 - Any user with a raw password instead of an Argon2id hash ⇒
   release-blocker. Discard the build.
-- An agent file without `authorized_by` ⇒ provision-trail
-  regression; audits become unreliable.
-- A `permissions.toml` referencing a role string not in
-  `BuiltInRole` ⇒ `FilesystemPermissionIndex::open` will return
+- An agent file without `authorized_by` (or with a bare-UUID
+  `authorized_by`) ⇒ provision-trail regression; audits become
+  unreliable.
+- A `permissions.toml` whose `role` string is not in the
+  `BuiltInRole` enum (snake-case form) ⇒
+  `FilesystemPermissionIndex::open` will return
   `InvalidInput` on next start; the disk format has drifted from
   the enum.
+- `principal` or `scope` serialised as a bare string ⇒ adjacent-tag
+  serde policy regressed; on-disk format is no longer round-trip
+  compatible with `PrincipalId` / `Resource`.
 
 ### Step M3.4 — Token negative surface (§4.5 no-mode-leak)
 
@@ -440,8 +468,8 @@ Before tagging a Phase-1-M3 release or handing the project off:
 - [ ] M2 — Step M2.1 + M2.2 + M2.3 all green; on-disk layout
       matches ADR-001 exactly.
 - [ ] M3 — Step M3.1 + M3.2 + M3.3 + M3.4 all green;
-      `pw_hash` starts with `$argon2id$`; every agent record has
-      `authorized_by`.
+      `password_hash` starts with `$argon2id$`; every agent record
+      has `authorized_by` with the `user:` / `agent:` prefix.
 - [ ] Cross-milestone — `m3_end_to_end` test green.
 - [ ] `cargo clippy --workspace --all-targets --locked -- -D
       warnings` clean.
