@@ -1,15 +1,17 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 use async_trait::async_trait;
 use bytes::Bytes;
 use liquid_cache::ReadCache;
 use liquid_core::{
-    CommitId, ContentHash, LiquidError, OperationId, PrincipalId, Result, StorePath, WorkspaceId,
+    CommitId, ContentHash, OperationId, PrincipalId, Result, StorePath, WorkspaceId,
 };
 
 use crate::content_store::ContentStore;
 use crate::operation::Operation;
+
+type IndexMap = HashMap<(WorkspaceId, StorePath), ContentHash>;
 
 /// `ContentStore` wrapper that warms a [`ReadCache`] on every `read`
 /// hit and invalidates the prior content hash on every `write` /
@@ -49,7 +51,7 @@ pub struct CachedContentStore<S, C> {
     /// the next read miss. The Mutex is uncontended in the common
     /// case (single bridge worker) and bounded in size by the number
     /// of live paths the runtime has read since startup.
-    index: Mutex<HashMap<(WorkspaceId, StorePath), ContentHash>>,
+    index: Mutex<IndexMap>,
 }
 
 impl<S, C> CachedContentStore<S, C>
@@ -67,6 +69,21 @@ where
             index: Mutex::new(HashMap::new()),
         }
     }
+
+    /// Acquire the index lock, transparently recovering from poison.
+    /// If a previous holder of the lock panicked, the inner `HashMap`
+    /// may be in a stale-but-not-unsafe state — at worst the cache
+    /// returns an out-of-date hash, which the cache layer already
+    /// handles by re-reading from the inner store. We therefore
+    /// silently take the inner data via `PoisonError::into_inner`
+    /// rather than propagating an error every caller would have to
+    /// handle. Using `unwrap_or_else` keeps us Absolute-Rule-1
+    /// compliant (the rule forbids `.unwrap()` / `.expect()` only).
+    fn lock_index(&self) -> MutexGuard<'_, IndexMap> {
+        self.index
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
 }
 
 #[async_trait]
@@ -80,13 +97,7 @@ where
         // the cache still holds the bytes, return them without
         // touching the inner store — this is the M4 success-criterion
         // path.
-        let cached_hash = {
-            let idx = self
-                .index
-                .lock()
-                .map_err(|_| LiquidError::InvalidInput("cache index mutex poisoned".into()))?;
-            idx.get(&(workspace, path.clone())).cloned()
-        };
+        let cached_hash = self.lock_index().get(&(workspace, path.clone())).cloned();
         if let Some(hash) = cached_hash {
             if let Some(bytes) = self.cache.get(hash).await {
                 return Ok(bytes);
@@ -97,13 +108,8 @@ where
 
         let bytes = self.inner.read(workspace, path).await?;
         let new_hash = ContentHash::of_bytes(&bytes);
-        {
-            let mut idx = self
-                .index
-                .lock()
-                .map_err(|_| LiquidError::InvalidInput("cache index mutex poisoned".into()))?;
-            idx.insert((workspace, path.clone()), new_hash.clone());
-        }
+        self.lock_index()
+            .insert((workspace, path.clone()), new_hash.clone());
         self.cache.put(new_hash, bytes.clone()).await;
         Ok(bytes)
     }
@@ -128,13 +134,7 @@ where
         // failure. Phase 3 (when retry semantics arrive on the
         // bridge layer) should snapshot-then-rollback the index
         // mutation on inner-call failure. Tracked under M4 follow-up.
-        let prior = {
-            let mut idx = self
-                .index
-                .lock()
-                .map_err(|_| LiquidError::InvalidInput("cache index mutex poisoned".into()))?;
-            idx.remove(&(workspace, path.clone()))
-        };
+        let prior = self.lock_index().remove(&(workspace, path.clone()));
         if let Some(hash) = prior {
             self.cache.invalidate(hash).await;
         }
@@ -158,18 +158,11 @@ where
         // the inner undo returns Err, the cache is already flushed
         // and correctness is preserved but a warm slice of the
         // cache is lost. Same Phase-3 follow-up applies.
-        let drained: Vec<ContentHash> = {
-            let mut idx = self
-                .index
-                .lock()
-                .map_err(|_| LiquidError::InvalidInput("cache index mutex poisoned".into()))?;
-            let to_drop: Vec<(WorkspaceId, StorePath)> = idx
-                .keys()
-                .filter(|(ws, _)| *ws == workspace)
-                .cloned()
-                .collect();
-            to_drop.into_iter().filter_map(|k| idx.remove(&k)).collect()
-        };
+        let drained: Vec<ContentHash> = self
+            .lock_index()
+            .extract_if(|(ws, _), _| *ws == workspace)
+            .map(|(_, hash)| hash)
+            .collect();
         for hash in drained {
             self.cache.invalidate(hash).await;
         }

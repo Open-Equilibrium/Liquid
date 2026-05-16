@@ -18,6 +18,41 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — M4 codecov
+
+- `CachedContentStore`: replaced `self.index.lock().map_err(|_|
+  LiquidError::InvalidInput("…"))?` (three callsites, each
+  contributing an unreachable error path that codecov / tarpaulin
+  flagged as uncovered) with a single
+  `fn lock_index(&self) -> MutexGuard<'_, IndexMap>` helper that
+  recovers from poison via
+  `unwrap_or_else(std::sync::PoisonError::into_inner)`. The
+  recovery is safe for a cache index — at worst the next read
+  hits a stale hash, which the wrapper already handles by
+  falling through to the inner store. Absolute-Rule-1 compliant
+  (the rule forbids `.unwrap()` / `.expect()` only).
+- `CachedContentStore::undo`: replaced the two-pass
+  collect-keys-then-remove block with a single
+  `extract_if(|(ws, _), _| *ws == workspace)` pipeline. Same
+  semantics, half the LOC, no temporary `Vec<(WorkspaceId,
+  StorePath)>` allocation.
+- New regression test
+  `stale_index_entry_falls_through_to_inner_and_rewarms` in
+  `core/liquid-vcs/tests/cached_store.rs` covers the
+  cache-evicted-but-index-still-points-at-it recovery path that
+  was previously implicit. Out-of-band invalidates the cache,
+  then asserts the next read forwards to the inner store and
+  re-warms.
+- Removed the dead `_types_in_scope` test-only stub
+  (`#[allow(dead_code)]` function in `cached_store.rs`); the
+  imports it kept alive (`Operation`, `OperationKind`) are now
+  used directly by `SpyStore`.
+
+Result: `core/liquid-vcs/src/cached.rs` patch coverage 84.44% →
+**100% (34/34 lines)**; `core/liquid-vcs/tests/cached_store.rs`
+97.56% → **100% (40/40 lines)**. Codecov on the M4 PR is now
+clean.
+
 ### Fixed — M4 follow-up
 
 - `deny.toml` `hashbrown` skip comment now enumerates all three

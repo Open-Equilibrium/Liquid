@@ -18,11 +18,11 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use liquid_cache::InProcessCache;
+use liquid_cache::{InProcessCache, ReadCache};
 use liquid_core::{
-    CommitId, LiquidError, OperationId, PrincipalId, Result, StorePath, WorkspaceId,
+    CommitId, ContentHash, LiquidError, OperationId, PrincipalId, Result, StorePath, WorkspaceId,
 };
-use liquid_vcs::{CachedContentStore, ContentStore, Operation, OperationKind};
+use liquid_vcs::{CachedContentStore, ContentStore, Operation};
 
 // ── Spy ContentStore ─────────────────────────────────────────────────
 //
@@ -353,8 +353,44 @@ async fn cache_is_independent_per_workspace_at_key_level() {
     );
 }
 
-// `Operation` and `OperationKind` are re-exported through the trait so
-// the SpyStore can construct them in future tests. Touching here so
-// the import does not become dead.
-#[allow(dead_code)]
-fn _types_in_scope(_: Operation, _: OperationKind) {}
+#[tokio::test]
+async fn stale_index_entry_falls_through_to_inner_and_rewarms() {
+    // Covers the recovery path inside `CachedContentStore::read` for
+    // when the wrapper's `(ws, path) → ContentHash` index points at a
+    // hash that the underlying `ReadCache` has since evicted. The
+    // wrapper must NOT return a stale `None` / panic; it must
+    // fall through to the inner store, re-hash, re-index, and
+    // re-warm.
+    //
+    // We force the situation by warming via the wrapper, then
+    // invalidating the entry directly on the cache handle behind the
+    // wrapper's back — leaving the index entry intact but the cache
+    // empty.
+    let (_spy, counts, cache, store) = fresh();
+    let ws = WorkspaceId::new();
+    let path = p("doc.txt");
+    let author = PrincipalId::new_user();
+    let body = Bytes::from_static(b"hello stale");
+
+    store
+        .write(ws, &path, body.clone(), author, "seed")
+        .await
+        .expect("write");
+    let _ = store.read(ws, &path).await.expect("warm read");
+    let reads_after_warm = counts.read.load(Ordering::SeqCst);
+    assert_eq!(cache.len(), 1, "warm read populated the cache");
+
+    // Out-of-band eviction.
+    let known_hash = ContentHash::of_bytes(&body);
+    cache.invalidate(known_hash).await;
+    assert_eq!(cache.len(), 0, "cache cleared but the index still maps");
+
+    // Read with stale index — must reach the inner store and re-warm.
+    let got = store.read(ws, &path).await.expect("recovery read");
+    assert_eq!(got, body, "stale-entry recovery must return correct bytes");
+    assert!(
+        counts.read.load(Ordering::SeqCst) > reads_after_warm,
+        "stale-entry recovery must forward to the inner store"
+    );
+    assert_eq!(cache.len(), 1, "recovery must re-warm the cache");
+}
