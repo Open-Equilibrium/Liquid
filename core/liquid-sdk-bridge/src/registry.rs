@@ -184,6 +184,20 @@ impl FilesystemWorkspaceRegistry {
 
 #[async_trait]
 impl WorkspaceRegistry for FilesystemWorkspaceRegistry {
+    /// Insert a record and persist the snapshot to disk.
+    ///
+    /// **Phase-1 concurrency caveat.** The in-memory cache lock is
+    /// dropped *before* `flush_locked` writes the snapshot to disk
+    /// (so a slow disk does not block the cache against concurrent
+    /// readers). Two tasks calling `register` simultaneously inside
+    /// the same process therefore race on the on-disk write order —
+    /// the second snapshot wins but both registrations remain in
+    /// memory, so a subsequent process restart may see only one.
+    /// The Phase-1 CLI is single-process current-thread (see
+    /// `IMPLEMENTATION_PLAN.md §5.6`), so this race is unreachable
+    /// today; the file-locked variant lands with the Phase-3 server
+    /// process (TASK aligned with the M18 distributed-event-bus
+    /// work — `IMPLEMENTATION_PLAN.md §8`).
     async fn register(&self, record: WorkspaceRecord) -> Result<()> {
         let snapshot = {
             let mut guard = self.lock_cache();

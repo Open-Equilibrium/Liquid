@@ -90,7 +90,10 @@ emit maps `OperationKind::{Create,Update}` to the user-visible
       after dropping every `skip "pending M6.5"`.
 - [x] Every subcommand has a focused bats test covering the happy
       path and at least one auth-failure / negative path
-      (`tests/cli/10_cli_subcommands.bats`, 13 cases).
+      (`tests/cli/10_cli_subcommands.bats`, 16 cases — the post-M6.5
+      audit commit `a7b8d75` added 3 cases for short-form
+      `--principal` filter, `--action Undo` discrimination, and the
+      bootstrap-token-missing edge case).
 - [x] No `unwrap()` / `expect()` outside `#[cfg(test)]`.
 - [x] `IMPLEMENTATION_PLAN.md §12` grammar matches every shipped
       subcommand; §5.6 ticks every checkbox; §9 `liquid-cli`
@@ -123,11 +126,14 @@ free-standing `pub async fn` shape to the `BridgeServices`-with-
 principal to gate against — Rule-4 violation).
 
 **Acceptance criteria.**
-- [x] `cargo test -p liquid-sdk-bridge` is green (5 inline unit +
-      10 `m5_end_to_end` integration = 15 tests; covers every entry
-      point, the tampered-token rejection path, the
-      `Forbidden`-without-binding path, and the bytes +
-      content-hash round-trip)
+- [x] `cargo test -p liquid-sdk-bridge` is green (24 tests total —
+      5 `api.rs` inline + 12 `m5_end_to_end` integration + 7
+      `registry.rs` inline; covers every entry point, the
+      tampered-token rejection path, the
+      `Forbidden`-without-binding path, the bytes +
+      content-hash round-trip, and the cross-process
+      `FilesystemWorkspaceRegistry` reload contract added with
+      M6.5).
 - [x] `cargo clippy --workspace --all-targets --locked -- -D
       warnings` clean
 - [x] No `unwrap()` / `expect()` outside `#[cfg(test)]` /

@@ -23,6 +23,14 @@ liquid-sdk-bridge.workspace = true
 
 bytes.workspace = true
 clap = { version = "4.5", features = ["derive", "env"] }
+# Direct CSPRNG access for the HMAC signing-key bootstrap in
+# `services::ensure_secret`. The uuid + argon2 crates already pull
+# `getrandom` transitively, so adding it as a direct dep does not
+# inflate the dep graph; doing so lets us write 32 bytes of full
+# entropy instead of `Uuid::new_v4().as_bytes() * 2` which only
+# contributes 244 bits (UUID v4 fixes 6 bits — 4-bit version nibble
+# + 2 variant bits).
+getrandom = "0.2"
 serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["macros", "rt"] }

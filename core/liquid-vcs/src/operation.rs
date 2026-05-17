@@ -17,6 +17,22 @@ pub struct Operation {
     pub kind: OperationKind,
 }
 
+/// One entry in the operation log.
+///
+/// **Phase-1 storage caveat.** `Update` and `Delete` variants carry
+/// the pre-image bytes inline so `undo` can reverse them without a
+/// second store lookup. With the JSONL on-disk encoding (one record
+/// per line in `op_log.jsonl`), each `Update` of an N-byte file
+/// appends roughly `2 × N` bytes of `prev` + `content` serialized as
+/// JSON number arrays — ~3-4× the raw size. A workspace with many
+/// rewrites of large pages grows the log without bound and
+/// `FilesystemContentStore::undo` re-reads the whole file on every
+/// call. Content-addressed pre-image storage + a periodic log
+/// compaction land with the M2 Jujutsu backend (TASK-004,
+/// `IMPLEMENTATION_PLAN.md §5.2` final sub-task), which is the
+/// designed-in fix for this growth pattern; the in-memory and
+/// JSONL backends are explicitly the development / single-user
+/// variants per ADR-001.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum OperationKind {

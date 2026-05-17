@@ -117,8 +117,12 @@ pub fn emit(format: crate::args::Format, env: &Envelope) {
 
 fn emit_json(env: &Envelope) {
     if let Some(records) = &env.records {
-        // NDJSON emit — one record per line. Top-level `ok`
-        // envelope is still emitted last so a caller can grep it.
+        // NDJSON emit — one bare record per line. There is **no**
+        // trailing `{"ok":true,…}` envelope on the success path: an
+        // agent reading the stream takes the absence of a `{"ok":
+        // false,…}` envelope and a zero exit code as success.
+        // The error path goes through the non-records branch below
+        // and *does* emit a `{"ok":false,…}` envelope (one line).
         for r in records {
             // Each line is valid JSON; `serde_json::to_string`
             // returns a single line by default.

@@ -50,6 +50,25 @@ teardown() {
   [[ "$(cat $LIQUID_HOME/token)" =~ ^u:[0-9a-f-]+\.[0-9]+\.[0-9a-f]+$ ]]
 }
 
+@test "credential files (secret + token) are mode 0600" {
+  # Regression for the post-M6.5 audit H1: the HMAC signing key + the
+  # bootstrap bearer token must not be world-readable. A world-readable
+  # secret lets any local user forge session tokens for any principal;
+  # a world-readable token hijacks the bootstrap session. atomic_write
+  # in services.rs must chmod 0600 after the rename.
+  if [ "$(uname -s)" = "MINGW"* ] || [ "$(uname -s)" = "Windows_NT" ]; then
+    skip "POSIX mode bits N/A on Windows (ACL inheritance applies)"
+  fi
+  liquid --format json workspace create demo >/dev/null
+  # GNU stat → '%a'; BSD stat → '-f %Lp'. Use both and take whichever works.
+  mode_secret=$(stat -c '%a' "$LIQUID_HOME/secret" 2>/dev/null \
+    || stat -f '%Lp' "$LIQUID_HOME/secret")
+  mode_token=$(stat -c '%a' "$LIQUID_HOME/token" 2>/dev/null \
+    || stat -f '%Lp' "$LIQUID_HOME/token")
+  [ "$mode_secret" = "600" ]
+  [ "$mode_token" = "600" ]
+}
+
 @test "workspace create persists registry across invocations" {
   ws1=$(liquid --format json workspace create alpha | jq -r '.data.workspace_id')
   ws2=$(liquid --format json workspace create beta  | jq -r '.data.workspace_id')
