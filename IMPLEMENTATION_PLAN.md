@@ -165,7 +165,7 @@ liquid/
 **Data flow for a page load:**
 
 1. Dart calls `bridge.loadPage(workspaceId, pageId)` via FFI
-2. `liquid-sdk-bridge` calls `liquid-permissions` — checks read access (O(1) index lookup)
+2. `liquid-sdk-bridge` calls `liquid-permissions` — checks read access (O(n_bindings) in Phase 1; O(1) with the Phase-3 materialised index — see §7.3 Milestone 15)
 3. If permitted, calls `liquid-cache` — returns page bytes if warm
 4. On cache miss, calls `liquid-vcs` — reads from Jujutsu, warms cache
 5. Returns `PageSnapshot` (serialised) to Dart
@@ -265,7 +265,13 @@ would be unreachable code, so it is omitted rather than stubbed.
 #[async_trait]
 pub trait PermissionIndex: Send + Sync {
     /// Returns true if `principal` may perform `action` on `resource`.
-    /// Must complete in < 1 ms under load (index lookup, not graph traversal).
+    ///
+    /// Phase-1 implementations (`InMemoryPermissionIndex`,
+    /// `FilesystemPermissionIndex`) scan a `HashSet<Binding>` —
+    /// O(n_bindings). The materialised principal → action → resource
+    /// index that brings this down to O(1) lands with Phase-3
+    /// Milestone 15 (§7.3 — Distributed permission index). Callers
+    /// must not assume O(1) today.
     async fn check(
         &self,
         principal: PrincipalId,

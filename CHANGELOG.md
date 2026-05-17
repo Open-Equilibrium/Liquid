@@ -18,6 +18,20 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — round-5 doc-only audit finding (last O(1) drift)
+
+- `IMPLEMENTATION_PLAN.md §4.1` data-flow callout (line 168) and
+  `§4.2` inline trait doc block (line 268) still claimed
+  `O(1)` / `< 1 ms under load` for `PermissionIndex::check`. The
+  round-1 commit fixed the source docstring in `index.rs` to say
+  `O(n_bindings)` in Phase 1 but the round-1 CHANGELOG erroneously
+  claimed `§4.2` was synced — it was not. Both stale claims now
+  mirror the source: Phase-1 `O(n_bindings)`; Phase-3 Milestone 15
+  (`§7.3`) materialises the principal → action → resource index
+  that brings it down to `O(1)`. The Phase-3 / Phase-4 SDK API
+  tables (lines 1042, 1129, 1530-31) keep the `< 1 ms p99` target
+  because they describe the *post-materialisation* shape.
+
 ### Fixed — round-4 doc-only audit finding (last stale count)
 
 - `IMPLEMENTATION_PLAN.md §5.6` line 734: companion-suite count
