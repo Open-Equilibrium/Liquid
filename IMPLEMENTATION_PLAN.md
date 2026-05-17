@@ -731,12 +731,12 @@ workspace, writes a page, reads it back, prints the audit log entry
 for the write, undoes the write, and re-reads the page to confirm the
 undo. Plus the AppViewer-cannot-write negative path (Absolute Rule 4
 proof). Companion focused suite:
-`tests/cli/10_cli_subcommands.bats` (16 cases — version, no-args,
+`tests/cli/10_cli_subcommands.bats` (17 cases — version, no-args,
 bootstrap files, registry persistence, `auth token` happy + no-token,
 invalid workspace UUID, `--file` body source, NotFound on unknown
 read, `--action Write` filter, `--principal a:<uuid>` short-form
 filter, `--action Undo` discrimination, bootstrap edge case,
-text-format summary + stderr error).
+text-format summary + stderr error, credential-file mode 0600).
 Manual validation: [`docs/manual-validation-m6.5.md`](docs/manual-validation-m6.5.md).
 
 ---

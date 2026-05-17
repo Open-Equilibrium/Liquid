@@ -18,6 +18,15 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — round-4 doc-only audit finding (last stale count)
+
+- `IMPLEMENTATION_PLAN.md §5.6` line 734: companion-suite count
+  string `"(16 cases — …)"` for `tests/cli/10_cli_subcommands.bats`
+  was the last current-state count claim still pointing at the
+  pre-credential-mode-test number. Updated to `17 cases` and
+  appended `credential-file mode 0600` to the case enumeration so
+  the plan matches `TASKS.md` and the actual `^@test` count.
+
 ### Fixed — round-3 doc-only audit findings
 
 - `core/liquid-sdk-bridge/src/registry.rs` + matching CHANGELOG
