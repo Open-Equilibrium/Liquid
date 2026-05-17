@@ -232,9 +232,12 @@ struct WorkspacesFile {
 ///
 /// `workspaces.toml` records `{id, name, created_by, created_unix}`
 /// for every workspace on the host. Owner-only access prevents a
-/// local attacker from enumerating the workspace ID space (which
-/// `delete_workspace` already takes pains to keep behind an
-/// anti-enumeration permission gate per §4.5).
+/// local attacker from enumerating the workspace ID space the way
+/// it could from `ls $LIQUID_HOME/registry/` if the file were
+/// world-readable; the (Phase-2) `delete_workspace` bridge fn
+/// extends the same anti-enumeration posture by gating on
+/// permission *before* the registry lookup so unknown IDs surface
+/// as `Forbidden` not `NotFound`.
 fn atomic_write(target: &Path, bytes: &[u8]) -> Result<()> {
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).map_err(|e| io_err("create parent", &e))?;

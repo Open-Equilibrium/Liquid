@@ -18,6 +18,29 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — round-3 doc-only audit findings
+
+- `core/liquid-sdk-bridge/src/registry.rs` + matching CHANGELOG
+  bullet: removed an incorrect `§4.5` cross-reference. `§4.5` is
+  `Identity (liquid-auth)`, not the anti-enumeration posture that
+  the round-2 comment claimed. Reworded the doc comment to describe
+  the workspace-ID enumeration risk directly (a world-readable
+  `workspaces.toml` plus `ls $LIQUID_HOME/registry/` is the leak)
+  and to mention `delete_workspace` only as a forward (Phase-2)
+  reference rather than as an existing implementation.
+- `tests/cli/10_cli_subcommands.bats:91`: comment claimed
+  `permissions.toml` lives at `perm/<workspace>/permissions.toml`,
+  but `workspace_file()` in `liquid-permissions/src/filesystem.rs`
+  inserts an extra `workspaces/` segment — actual path is
+  `perm/workspaces/<workspace>/permissions.toml`. The `find` call
+  recursed correctly so the test still passed; only the navigation
+  comment was wrong.
+- `TASKS.md` TASK-008 acceptance criterion: separate bullet still
+  said "the seven subcommands are covered by 19 bats cases"
+  (historical: 6 MVP + 13 subcommand at first M6.5 ship). Updated
+  to 23 cases (6 MVP + 17 subcommand after the round-1 + post-M6.5
+  audits added 4 cases total).
+
 ### Security — close round-2 audit gaps (H3 + W6) on credential modes
 
 - `core/liquid-auth/src/storage.rs`: `atomic_write` now `chmod 0600`
@@ -36,8 +59,8 @@ moved into a real version section when a release is cut.
 - `core/liquid-sdk-bridge/src/registry.rs`: fourth `atomic_write`
   copy now `chmod 0600`. `workspaces.toml` recorded `{id, name,
   created_by, created_unix}` for every workspace on the host;
-  owner-only access aligns with the anti-enumeration posture
-  `delete_workspace` already takes (§4.5).
+  owner-only access prevents trivial workspace-ID enumeration via
+  `ls $LIQUID_HOME/registry/`.
 - `tests/cli/10_cli_subcommands.bats`: the previous `secret + token`
   mode test was expanded to cover all six sensitive files
   (`secret`, `token`, `auth/users.toml`, `auth/agents.toml`,

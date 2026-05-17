@@ -105,7 +105,9 @@ emit maps `OperationKind::{Create,Update}` to the user-visible
 - [x] `.codecov.yml` keeps `core/liquid-cli/**` exempted per §15
       "≥ 80% line coverage on all crates except `liquid-cli`" —
       the CLI's behaviour test is bats, which tarpaulin does not
-      see; the seven subcommands are covered by 19 bats cases.
+      see; the seven subcommands are covered by 23 bats cases (6
+      end-to-end happy-path scenarios in `00_mvp_slice.bats` plus
+      17 focused per-subcommand cases in `10_cli_subcommands.bats`).
 - [x] Manual validation:
       [`docs/manual-validation-m6.5.md`](docs/manual-validation-m6.5.md).
 

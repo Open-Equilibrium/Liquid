@@ -88,7 +88,11 @@ teardown() {
   [ "$(mode "$LIQUID_HOME/auth/users.toml")" = "600" ]
   [ "$(mode "$LIQUID_HOME/auth/agents.toml")" = "600" ]
   [ "$(mode "$LIQUID_HOME/registry/workspaces.toml")" = "600" ]
-  # permissions.toml lives at perm/<workspace>/permissions.toml
+  # permissions.toml lives at perm/workspaces/<workspace>/permissions.toml
+  # (FilesystemPermissionIndex roots at $LIQUID_HOME/perm, then
+  # workspace_file() in filesystem.rs adds the workspaces/<id>/
+  # segments). find recurses so the path layout could shift without
+  # breaking this assertion.
   perm_file=$(find "$LIQUID_HOME/perm" -name 'permissions.toml' | head -n1)
   [ -n "$perm_file" ]
   [ "$(mode "$perm_file")" = "600" ]
