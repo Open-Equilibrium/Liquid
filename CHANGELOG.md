@@ -18,6 +18,22 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — codecov report configuration + visibility
+
+- `.codecov.yml`: `flags:` was nested under `coverage:` — codecov's
+  schema requires it at document root, so the per-layer
+  `rust` / `sdk` / `app` carryforward + path filtering was being
+  silently dropped on every upload. Moved `flags:` to root and added
+  an explanatory comment so the nesting bug cannot recur.
+- `.codecov.yml`: bumped patch-coverage target from `70%` → `90%`
+  (threshold `10%` → `5%`). Phase-1 practice already drives every
+  new patch to 100% before merge (see the `9c920bc` and `a26be22`
+  fix commits) — the old `70%` target was looser than the
+  working policy and let regressions slip past automated review.
+- `README.md`: added a [codecov badge](https://codecov.io/gh/open-equilibrium/liquid)
+  next to the CI badge so contributors + auditors can see the
+  workspace-wide line coverage at a glance.
+
 ### Fixed — codecov patch coverage on M6.5 (TASK-008 follow-up)
 
 - `core/liquid-sdk-bridge/src/registry.rs`: added
