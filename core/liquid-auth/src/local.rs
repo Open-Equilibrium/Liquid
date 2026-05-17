@@ -96,6 +96,18 @@ impl LocalIdentityProvider {
 
     /// Verify a username + password against the stored Argon2id hash and
     /// issue a fresh session token on success.
+    ///
+    /// **Phase-1 timing caveat.** Unknown-username returns `Forbidden`
+    /// before `verify_password` runs, while wrong-password runs Argon2id
+    /// to completion (~0.5–2 s). A remote attacker can therefore tell
+    /// "user does not exist" from "wrong password" by wall-clock time,
+    /// which enables username enumeration. This is acceptable for
+    /// Phase 1 because the only `authenticate_user` caller is the M6.5
+    /// CLI's bootstrap path (single-user local process); the Phase-3
+    /// surface replaces this with OIDC. Before Phase 1 exposes
+    /// `authenticate_user` over a network (e.g. an HTTP login endpoint),
+    /// the unknown-username branch must also run a constant-time
+    /// Argon2id dummy verification so both arms take the same time.
     pub async fn authenticate_user(&self, username: &str, password: &str) -> Result<String> {
         let principal = {
             let guard = self.state.lock().map_err(poisoned)?;

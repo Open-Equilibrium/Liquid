@@ -90,6 +90,13 @@ pub(crate) fn ensure_root(root: &Path) -> Result<()> {
     fs::create_dir_all(root).map_err(|e| io_err(&e))
 }
 
+/// Atomic write + Unix mode 0600 clamp.
+///
+/// `users.toml` holds the Argon2id PHC string for every registered
+/// user; `agents.toml` holds the agent registry (`authorized_by`
+/// principal IDs + names). Both must NOT be readable by other local
+/// users — the default umask (often 0022) would otherwise leave the
+/// PHC string world-readable, enabling offline dictionary attacks.
 fn atomic_write(target: &Path, bytes: &[u8]) -> Result<()> {
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).map_err(|e| io_err(&e))?;
@@ -101,7 +108,22 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<()> {
         f.write_all(bytes).map_err(|e| io_err(&e))?;
         f.sync_all().map_err(|e| io_err(&e))?;
     }
-    fs::rename(&tmp, target).map_err(|e| io_err(&e))
+    fs::rename(&tmp, target).map_err(|e| io_err(&e))?;
+    restrict_perms(target)
+}
+
+#[cfg(unix)]
+fn restrict_perms(target: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(target, std::fs::Permissions::from_mode(0o600)).map_err(|e| io_err(&e))
+}
+
+#[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)] // signature must match the Unix arm
+fn restrict_perms(_target: &Path) -> Result<()> {
+    // Windows ACL inheritance from the parent directory; tightening
+    // the file ACL explicitly is out of scope for Phase 1.
+    Ok(())
 }
 
 fn io_err(e: &std::io::Error) -> LiquidError {

@@ -19,7 +19,16 @@ use crate::role::BuiltInRole;
 #[async_trait]
 pub trait PermissionIndex: Send + Sync {
     /// `true` iff `principal` may perform `action` on `resource`.
-    /// Must be O(1) under load — this is on the hot path of every bridge call.
+    ///
+    /// Phase-1 implementations are **`O(n_bindings)`** — both
+    /// `InMemoryPermissionIndex` and `FilesystemPermissionIndex`
+    /// scan a `HashSet<Binding>`. The materialised
+    /// principal → action → resource index that brings this down to
+    /// `O(1)` lands with Phase-3 Milestone 15 (see
+    /// `IMPLEMENTATION_PLAN.md §7.3` — "Distributed permission
+    /// index"). Callers should not assume `O(1)` today;
+    /// `list_workspaces` in particular compounds to
+    /// `O(n_workspaces × n_bindings)` per call.
     async fn check(
         &self,
         principal: PrincipalId,
@@ -87,10 +96,10 @@ impl Binding {
 
 /// In-memory implementation of [`PermissionIndex`]. Use this in tests
 /// and dev mode where persistence is not required. The durable TOML-
-/// backed sibling [`crate::FilesystemPermissionIndex`] (TASK-007,
-/// Status: Done — `IMPLEMENTATION_PLAN.md` §5.3 last bullet) ships
-/// the same trait surface for Phase-1 production deployments; both
-/// backends share the [`Binding::matches`] check.
+/// backed sibling [`crate::FilesystemPermissionIndex`]
+/// (`IMPLEMENTATION_PLAN.md §5.3`) ships the same trait surface for
+/// Phase-1 production deployments; both backends share the
+/// [`Binding::matches`] check.
 #[derive(Debug, Default)]
 pub struct InMemoryPermissionIndex {
     bindings: Mutex<HashSet<Binding>>,

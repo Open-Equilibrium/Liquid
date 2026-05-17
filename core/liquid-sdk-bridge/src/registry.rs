@@ -184,6 +184,20 @@ impl FilesystemWorkspaceRegistry {
 
 #[async_trait]
 impl WorkspaceRegistry for FilesystemWorkspaceRegistry {
+    /// Insert a record and persist the snapshot to disk.
+    ///
+    /// **Phase-1 concurrency caveat.** The in-memory cache lock is
+    /// dropped *before* `flush_locked` writes the snapshot to disk
+    /// (so a slow disk does not block the cache against concurrent
+    /// readers). Two tasks calling `register` simultaneously inside
+    /// the same process therefore race on the on-disk write order —
+    /// the second snapshot wins but both registrations remain in
+    /// memory, so a subsequent process restart may see only one.
+    /// The Phase-1 CLI is single-process current-thread (see
+    /// `IMPLEMENTATION_PLAN.md §5.6`), so this race is unreachable
+    /// today; the file-locked variant lands with the Phase-3 server
+    /// process (TASK aligned with the M18 distributed-event-bus
+    /// work — `IMPLEMENTATION_PLAN.md §8`).
     async fn register(&self, record: WorkspaceRecord) -> Result<()> {
         let snapshot = {
             let mut guard = self.lock_cache();
@@ -214,6 +228,16 @@ struct WorkspacesFile {
     workspaces: Vec<WorkspaceRecord>,
 }
 
+/// Atomic write + Unix mode 0600 clamp.
+///
+/// `workspaces.toml` records `{id, name, created_by, created_unix}`
+/// for every workspace on the host. Owner-only access prevents a
+/// local attacker from enumerating the workspace ID space the way
+/// it could from `ls $LIQUID_HOME/registry/` if the file were
+/// world-readable; the (Phase-2) `delete_workspace` bridge fn
+/// extends the same anti-enumeration posture by gating on
+/// permission *before* the registry lookup so unknown IDs surface
+/// as `Forbidden` not `NotFound`.
 fn atomic_write(target: &Path, bytes: &[u8]) -> Result<()> {
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).map_err(|e| io_err("create parent", &e))?;
@@ -225,7 +249,21 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<()> {
         f.write_all(bytes).map_err(|e| io_err("write tmp", &e))?;
         f.sync_all().map_err(|e| io_err("sync tmp", &e))?;
     }
-    fs::rename(&tmp, target).map_err(|e| io_err("rename", &e))
+    fs::rename(&tmp, target).map_err(|e| io_err("rename", &e))?;
+    restrict_perms(target)
+}
+
+#[cfg(unix)]
+fn restrict_perms(target: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(target, std::fs::Permissions::from_mode(0o600))
+        .map_err(|e| io_err("chmod 0600", &e))
+}
+
+#[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)] // signature must match the Unix arm
+fn restrict_perms(_target: &Path) -> Result<()> {
+    Ok(())
 }
 
 fn io_err(stage: &str, e: &std::io::Error) -> LiquidError {

@@ -24,6 +24,19 @@ use crate::{ContentStore, Operation, OperationKind};
 /// Atomic writes use the standard tmp-then-rename idiom. See
 /// `docs/adr/001-jujutsu-pinning.md` for why this is the Phase 1 default and
 /// what the upgrade path to a `JujutsuContentStore` looks like.
+///
+/// **Phase-1 concurrency caveat.** Every method here is declared
+/// `async` to fit the `ContentStore` trait, but the body uses
+/// synchronous `std::fs::*` calls and holds [`Self::write_lock`]
+/// across `f.sync_all()`. The Phase-1 CLI is single-process
+/// current-thread (`tokio::runtime::Builder::new_current_thread`),
+/// so a blocking `sync_all` only stalls the calling thread — there
+/// is no executor pool to starve. When the same crate is embedded
+/// in the multi-task Phase-3 server, every storage call here MUST
+/// be moved under `tokio::task::spawn_blocking` (or replaced with
+/// `tokio::fs::*` + a real file-lock primitive); the Jujutsu
+/// backend planned in TASK-004 handles its own async I/O so the
+/// server only needs to gate the in-memory + JSONL variants.
 #[derive(Debug)]
 pub struct FilesystemContentStore {
     root: PathBuf,

@@ -8,9 +8,15 @@
 //!   vcs/       — FilesystemContentStore (per-workspace dirs)
 //!   perm/      — FilesystemPermissionIndex (per-workspace perms.toml)
 //!   registry/  — FilesystemWorkspaceRegistry (workspaces.toml)
-//!   secret     — HMAC-SHA256 key bytes (≥16; first run generates 32)
-//!   token      — default bootstrap bearer token (one line; first run only)
+//!   secret     — HMAC-SHA256 key bytes (32, from `getrandom`);
+//!                forced to mode 0600 on Unix
+//!   token      — default bootstrap bearer token (one line; first
+//!                run only); forced to mode 0600 on Unix
 //! ```
+//!
+//! Both credential files are written through [`atomic_write`], which
+//! chmods 0600 after the rename so the process umask cannot leave
+//! them world-readable.
 //!
 //! Every Phase-1 subprocess re-opens the four backends, so the
 //! CLI is stateless beyond what lives in `$LIQUID_HOME`.
@@ -70,10 +76,10 @@ pub fn build_services(home: &Path) -> Result<CliServices> {
 }
 
 /// Load the HMAC secret from `<home>/secret`; generate + persist a
-/// fresh 32-byte secret on first run. We use two UUID v4s
-/// concatenated for the bytes — `uuid` is already a workspace
-/// dependency and pulls `getrandom`, so we avoid adding a separate
-/// CSPRNG crate.
+/// fresh 32-byte secret on first run, sourced from `getrandom` so we
+/// get the full 256 bits of entropy (UUID v4 fixes 6 bits — 4-bit
+/// version nibble + 2 variant bits — which would have given us only
+/// 244 effective bits with the prior `Uuid::new_v4()` × 2 source).
 fn ensure_secret(home: &Path) -> Result<Vec<u8>> {
     let path = home.join("secret");
     if path.exists() {
@@ -87,15 +93,24 @@ fn ensure_secret(home: &Path) -> Result<Vec<u8>> {
         }
         return Ok(bytes);
     }
-    let mut secret = Vec::with_capacity(32);
-    secret.extend_from_slice(uuid::Uuid::new_v4().as_bytes());
-    secret.extend_from_slice(uuid::Uuid::new_v4().as_bytes());
+    let mut secret = vec![0u8; 32];
+    getrandom::getrandom(&mut secret).map_err(|e| {
+        LiquidError::InvalidInput(format!("CSPRNG unavailable for HMAC secret: {e}"))
+    })?;
     atomic_write(&path, &secret)?;
     Ok(secret)
 }
 
-/// `<home>/secret` permissions write — atomic so a partial write
-/// cannot leave a half-secret on disk.
+/// Atomic write of a sensitive file (HMAC secret, bearer token).
+///
+/// - Writes to `<target>.tmp`, fsyncs, then renames so a partial
+///   write cannot leave half a credential on disk.
+/// - On Unix, restricts the resulting file to mode `0600`
+///   (owner-read/write only). Without this, the process umask
+///   (often `0022`) leaves the credential world-readable, which
+///   lets any local user forge session tokens (HMAC key) or hijack
+///   the bootstrap session (token). Windows inherits ACLs from the
+///   parent directory.
 pub(crate) fn atomic_write(target: &Path, bytes: &[u8]) -> Result<()> {
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).map_err(|e| io_err("create parent", &e))?;
@@ -112,7 +127,25 @@ pub(crate) fn atomic_write(target: &Path, bytes: &[u8]) -> Result<()> {
         f.write_all(bytes).map_err(|e| io_err("write tmp", &e))?;
         f.sync_all().map_err(|e| io_err("sync tmp", &e))?;
     }
-    fs::rename(&tmp, target).map_err(|e| io_err("rename", &e))
+    fs::rename(&tmp, target).map_err(|e| io_err("rename", &e))?;
+    restrict_credential_perms(target)
+}
+
+#[cfg(unix)]
+fn restrict_credential_perms(target: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let perms = std::fs::Permissions::from_mode(0o600);
+    fs::set_permissions(target, perms).map_err(|e| io_err("chmod 0600", &e))
+}
+
+#[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)] // signature must match the Unix arm
+fn restrict_credential_perms(_target: &Path) -> Result<()> {
+    // Windows: file ACL is inherited from the parent directory.
+    // Tightening it requires `windows-acl` / `windows-sys` calls
+    // that are out of scope for Phase 1; the `$LIQUID_HOME` parent
+    // is owner-only by default on a per-user profile.
+    Ok(())
 }
 
 fn io_err(stage: &str, e: &std::io::Error) -> LiquidError {

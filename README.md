@@ -3,6 +3,7 @@
 > Cross-platform UI framework with VCS, fine-grained permissions, and AI agents as first-class principals — built in Rust + Flutter, scaling per workspace to 10 000+ users and 10 000+ agents.
 
 [![CI](https://github.com/open-equilibrium/liquid/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/open-equilibrium/liquid/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/open-equilibrium/liquid/branch/main/graph/badge.svg)](https://codecov.io/gh/open-equilibrium/liquid)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg)](https://www.conventionalcommits.org)
 

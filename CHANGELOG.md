@@ -18,6 +18,202 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — Windows CI (clippy `unnecessary_wraps` on `restrict_perms` no-op)
+
+- All four `restrict_perms` / `restrict_credential_perms` `#[cfg(not(unix))]`
+  arms (`liquid-auth/src/storage.rs`, `liquid-permissions/src/filesystem.rs`,
+  `liquid-sdk-bridge/src/registry.rs`, `liquid-cli/src/services.rs`)
+  unconditionally return `Ok(())`. Clippy's pedantic
+  `clippy::unnecessary_wraps` fires on Windows because the `Result` is
+  never used — but the signature must match the Unix arm that *does*
+  use `Result` for `map_err`. Added an `#[allow(clippy::unnecessary_wraps)]`
+  + cross-arm explanatory comment to each Windows variant so the
+  `cargo clippy --workspace -- -D warnings` CI step passes on
+  `windows-latest`. Verified locally via
+  `cargo clippy --target x86_64-pc-windows-gnu --workspace --all-targets --locked -- -D warnings`.
+
+### Fixed — round-6 doc-only audit finding (Go terminology in Rust plan)
+
+- `IMPLEMENTATION_PLAN.md §7.2` line 1022: the Milestone 14
+  (Redis distributed cache) benchmark acceptance criterion read
+  "100 concurrent **goroutines**". Liquid is a Rust project
+  (`redis-rs` async client, Tokio runtime) — the term was a
+  pre-existing language artifact carried over from an earlier
+  draft. Replaced with "100 concurrent **Tokio tasks**".
+
+### Fixed — round-5 doc-only audit finding (last O(1) drift)
+
+- `IMPLEMENTATION_PLAN.md §4.1` data-flow callout (line 168) and
+  `§4.2` inline trait doc block (line 268) still claimed
+  `O(1)` / `< 1 ms under load` for `PermissionIndex::check`. The
+  round-1 commit fixed the source docstring in `index.rs` to say
+  `O(n_bindings)` in Phase 1 but the round-1 CHANGELOG erroneously
+  claimed `§4.2` was synced — it was not. Both stale claims now
+  mirror the source: Phase-1 `O(n_bindings)`; Phase-3 Milestone 15
+  (`§7.3`) materialises the principal → action → resource index
+  that brings it down to `O(1)`. The Phase-3 / Phase-4 SDK API
+  tables (lines 1042, 1129, 1530-31) keep the `< 1 ms p99` target
+  because they describe the *post-materialisation* shape.
+
+### Fixed — round-4 doc-only audit finding (last stale count)
+
+- `IMPLEMENTATION_PLAN.md §5.6` line 734: companion-suite count
+  string `"(16 cases — …)"` for `tests/cli/10_cli_subcommands.bats`
+  was the last current-state count claim still pointing at the
+  pre-credential-mode-test number. Updated to `17 cases` and
+  appended `credential-file mode 0600` to the case enumeration so
+  the plan matches `TASKS.md` and the actual `^@test` count.
+
+### Fixed — round-3 doc-only audit findings
+
+- `core/liquid-sdk-bridge/src/registry.rs` + matching CHANGELOG
+  bullet: removed an incorrect `§4.5` cross-reference. `§4.5` is
+  `Identity (liquid-auth)`, not the anti-enumeration posture that
+  the round-2 comment claimed. Reworded the doc comment to describe
+  the workspace-ID enumeration risk directly (a world-readable
+  `workspaces.toml` plus `ls $LIQUID_HOME/registry/` is the leak)
+  and to mention `delete_workspace` only as a forward (Phase-2)
+  reference rather than as an existing implementation.
+- `tests/cli/10_cli_subcommands.bats:91`: comment claimed
+  `permissions.toml` lives at `perm/<workspace>/permissions.toml`,
+  but `workspace_file()` in `liquid-permissions/src/filesystem.rs`
+  inserts an extra `workspaces/` segment — actual path is
+  `perm/workspaces/<workspace>/permissions.toml`. The `find` call
+  recursed correctly so the test still passed; only the navigation
+  comment was wrong.
+- `TASKS.md` TASK-008 acceptance criterion: separate bullet still
+  said "the seven subcommands are covered by 19 bats cases"
+  (historical: 6 MVP + 13 subcommand at first M6.5 ship). Updated
+  to 23 cases (6 MVP + 17 subcommand after the round-1 + post-M6.5
+  audits added 4 cases total).
+
+### Security — close round-2 audit gaps (H3 + W6) on credential modes
+
+- `core/liquid-auth/src/storage.rs`: `atomic_write` now `chmod 0600`
+  on Unix (was previously a copy of the same plain helper as in
+  `services.rs` — the round-1 fix only patched the `services.rs`
+  copy). The leak surface here was the worst on the host:
+  `users.toml` stores Argon2id PHC strings for every registered
+  user, so a world-readable file enabled offline dictionary attacks.
+  `agents.toml` similarly leaked agent registry + `authorized_by`
+  principal IDs.
+- `core/liquid-permissions/src/filesystem.rs`: third `atomic_write`
+  copy now also `chmod 0600`. `permissions.toml` leaked the full
+  role-binding table (who has Admin? who has access to which
+  workspace?). Defense in depth even though it is not a credential
+  file.
+- `core/liquid-sdk-bridge/src/registry.rs`: fourth `atomic_write`
+  copy now `chmod 0600`. `workspaces.toml` recorded `{id, name,
+  created_by, created_unix}` for every workspace on the host;
+  owner-only access prevents trivial workspace-ID enumeration via
+  `ls $LIQUID_HOME/registry/`.
+- `tests/cli/10_cli_subcommands.bats`: the previous `secret + token`
+  mode test was expanded to cover all six sensitive files
+  (`secret`, `token`, `auth/users.toml`, `auth/agents.toml`,
+  `registry/workspaces.toml`, `perm/<workspace>/permissions.toml`).
+  The bats `if [...]` Windows skip guard was syntactically broken
+  (POSIX `[ ]` does not pattern-match a `MINGW*` glob — the `*` was
+  filename-expanded against `cwd` and never matched MSYS); rewrote
+  with `[[ ]]` so it actually fires on Git Bash / MSYS2 / Cygwin
+  / native PowerShell.
+- `core/liquid-permissions/src/index.rs`: doc cross-reference for
+  the Phase-3 materialised index corrected from §4.3 (which is
+  `ReadCache`) to §7.3 (Milestone 15 — Distributed permission
+  index).
+- `TASKS.md` TASK-008 acceptance criterion bumped 16 → 17 cases
+  (the round-1 commit added the credential-mode test in the same
+  change; the criterion was not incremented).
+
+### Security — credential files now mode 0600; HMAC secret uses 256-bit entropy
+
+- `core/liquid-cli/src/services.rs`: `atomic_write` (used for the
+  HMAC signing key at `$LIQUID_HOME/secret` and the bootstrap bearer
+  token at `$LIQUID_HOME/token`) now restricts the result to
+  Unix mode `0600` after `fs::rename`. Without this, the process
+  umask (often `0022`) left the files world-readable, which let any
+  local user forge session tokens (via the HMAC key) or hijack the
+  bootstrap session (via the token).
+- `ensure_secret` now sources 32 bytes from `getrandom::getrandom`
+  instead of two concatenated `Uuid::new_v4().as_bytes()` (UUID v4
+  fixes 6 bits — 4-bit version nibble + 2 variant bits — so the prior
+  source only contributed 244 effective bits).
+- `tests/cli/10_cli_subcommands.bats` grows to **17 cases** with a
+  new regression that asserts `stat -c %a` returns `600` for both
+  credential files after `workspace create`. Bats total → 105.
+
+### Fixed — Post-M6.5 audit (Phase-1 review pass on main)
+
+- `core/liquid-cli/src/output.rs:118-131`: corrected a misleading
+  comment that claimed a trailing `{"ok":true,…}` envelope was
+  emitted after the NDJSON record stream. No such envelope is
+  emitted; an agent reading the stream takes the absence of a
+  `{"ok":false,…}` envelope **and** a zero exit code as success.
+  Errors still emit a single-line envelope through the non-records
+  branch. The new comment makes the contract explicit so agent
+  integrators can rely on it.
+- `core/liquid-permissions/src/index.rs:21`: the `PermissionIndex`
+  trait doc claimed `check` is `O(1)`, but both shipped backends
+  scan a `HashSet<Binding>` (verified by the
+  `FilesystemPermissionIndex` module doc that correctly says
+  `O(n_bindings)`). Replaced the aspirational claim with the actual
+  Phase-1 complexity + a pointer to the Phase-3 materialised index
+  that brings it down to `O(1)`. Notes that `list_workspaces`
+  compounds to `O(n_workspaces × n_bindings)`.
+- `core/liquid-sdk-bridge/src/registry.rs:185`: documented the
+  Phase-1 race in `FilesystemWorkspaceRegistry::register` — the
+  in-memory cache lock is dropped before `flush_locked` writes the
+  snapshot, so two concurrent in-process tasks racing on `register`
+  may leave the second's record in memory but lost from disk. The
+  Phase-1 CLI is single-process current-thread so this is
+  unreachable today; the doc keeps the gap honest for the Phase-3
+  server.
+- `core/liquid-vcs/src/operation.rs:20`: documented the `Update` /
+  `Delete` pre-image bloat — `bytes::Bytes` serialises as JSON
+  number arrays via the `serde` feature, so an N-byte page that's
+  rewritten K times appends ~`2 × N × K` bytes to `op_log.jsonl`
+  and `undo` re-reads the whole file every call. Cross-referenced
+  the M2 Jujutsu backend (TASK-004) as the designed-in fix.
+- `core/liquid-vcs/src/filesystem.rs:15`: noted that
+  `FilesystemContentStore` mixes synchronous `std::fs::*` calls
+  inside `async` methods and holds `write_lock` across
+  `f.sync_all()`. Benign in the Phase-1 current-thread CLI runtime;
+  must be moved under `tokio::task::spawn_blocking` (or replaced
+  with `tokio::fs::*` + a real file lock) before the Phase-3 server
+  ships.
+- `core/liquid-auth/src/local.rs:97`: noted the Argon2id timing
+  side-channel in `authenticate_user` (unknown-username returns
+  before `verify_password` runs, ~0.5-2 s faster than
+  wrong-password). Acceptable for the Phase-1 local CLI bootstrap;
+  must be paired with a dummy constant-time verify before
+  `authenticate_user` is ever exposed over a network.
+- `core/liquid-permissions/src/index.rs:96`: cleaned up an inline
+  `TASK-007, Status: Done` annotation in the `InMemoryPermissionIndex`
+  struct doc — task status belongs in `TASKS.md`, not in source
+  doc comments where it rots.
+- `TASKS.md`: stale acceptance-criteria counts corrected — TASK-008
+  `10_cli_subcommands.bats` `13` → `16` cases (the post-M6.5 audit
+  commit `a7b8d75` added 3); TASK-011 sdk-bridge total `15` → `24`
+  tests (5 + 12 + 7 across api.rs, m5_end_to_end, registry.rs after
+  M6.5's `FilesystemWorkspaceRegistry` shipped).
+- `CHANGELOG.md`: M6.5 codecov fix entry updated from `23 bridge
+  tests` → `24` to match reality.
+
+### Fixed — codecov report configuration + visibility
+
+- `.codecov.yml`: `flags:` was nested under `coverage:` — codecov's
+  schema requires it at document root, so the per-layer
+  `rust` / `sdk` / `app` carryforward + path filtering was being
+  silently dropped on every upload. Moved `flags:` to root and added
+  an explanatory comment so the nesting bug cannot recur.
+- `.codecov.yml`: bumped patch-coverage target from `70%` → `90%`
+  (threshold `10%` → `5%`). Phase-1 practice already drives every
+  new patch to 100% before merge (see the `9c920bc` and `a26be22`
+  fix commits) — the old `70%` target was looser than the
+  working policy and let regressions slip past automated review.
+- `README.md`: added a [codecov badge](https://codecov.io/gh/open-equilibrium/liquid)
+  next to the CI badge so contributors + auditors can see the
+  workspace-wide line coverage at a glance.
+
 ### Fixed — codecov patch coverage on M6.5 (TASK-008 follow-up)
 
 - `core/liquid-sdk-bridge/src/registry.rs`: added
@@ -32,9 +228,10 @@ moved into a real version section when a release is cut.
 
 Result: `liquid-sdk-bridge/src/registry.rs` patch coverage
 95.65% → **100% (67/67 lines)**; workspace coverage
-94.14% → **94.36%** (+0.23%). All 23 bridge tests + 28
-workspace test groups + 104 bats cases continue to pass;
-clippy clean; fmt clean.
+94.14% → **94.36%** (+0.23%). All 24 bridge tests
+(5 `api.rs` + 12 `m5_end_to_end` + 7 `registry.rs`) plus the
+larger 28-group workspace suite and 104 bats cases continue
+to pass; clippy clean; fmt clean.
 
 ### Fixed — Post-M6.5 audit (TASK-008 follow-up)
 

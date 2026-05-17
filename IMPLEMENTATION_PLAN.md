@@ -165,7 +165,7 @@ liquid/
 **Data flow for a page load:**
 
 1. Dart calls `bridge.loadPage(workspaceId, pageId)` via FFI
-2. `liquid-sdk-bridge` calls `liquid-permissions` — checks read access (O(1) index lookup)
+2. `liquid-sdk-bridge` calls `liquid-permissions` — checks read access (O(n_bindings) in Phase 1; O(1) with the Phase-3 materialised index — see §7.3 Milestone 15)
 3. If permitted, calls `liquid-cache` — returns page bytes if warm
 4. On cache miss, calls `liquid-vcs` — reads from Jujutsu, warms cache
 5. Returns `PageSnapshot` (serialised) to Dart
@@ -265,7 +265,13 @@ would be unreachable code, so it is omitted rather than stubbed.
 #[async_trait]
 pub trait PermissionIndex: Send + Sync {
     /// Returns true if `principal` may perform `action` on `resource`.
-    /// Must complete in < 1 ms under load (index lookup, not graph traversal).
+    ///
+    /// Phase-1 implementations (`InMemoryPermissionIndex`,
+    /// `FilesystemPermissionIndex`) scan a `HashSet<Binding>` —
+    /// O(n_bindings). The materialised principal → action → resource
+    /// index that brings this down to O(1) lands with Phase-3
+    /// Milestone 15 (§7.3 — Distributed permission index). Callers
+    /// must not assume O(1) today.
     async fn check(
         &self,
         principal: PrincipalId,
@@ -731,12 +737,12 @@ workspace, writes a page, reads it back, prints the audit log entry
 for the write, undoes the write, and re-reads the page to confirm the
 undo. Plus the AppViewer-cannot-write negative path (Absolute Rule 4
 proof). Companion focused suite:
-`tests/cli/10_cli_subcommands.bats` (16 cases — version, no-args,
+`tests/cli/10_cli_subcommands.bats` (17 cases — version, no-args,
 bootstrap files, registry persistence, `auth token` happy + no-token,
 invalid workspace UUID, `--file` body source, NotFound on unknown
 read, `--action Write` filter, `--principal a:<uuid>` short-form
 filter, `--action Undo` discrimination, bootstrap edge case,
-text-format summary + stderr error).
+text-format summary + stderr error, credential-file mode 0600).
 Manual validation: [`docs/manual-validation-m6.5.md`](docs/manual-validation-m6.5.md).
 
 ---
@@ -1013,7 +1019,7 @@ Frame rate ≥ 60 fps on grid interactions measured with Flutter DevTools.
   `LIQUID_CACHE_URL`, `LIQUID_CACHE_POOL_SIZE`
 - [ ] Feature flag `distributed-cache` in `Cargo.toml` — off by default;
   single-binary deployments keep `InProcessCache` with no config change
-- [ ] Benchmark: warm read latency < 1 ms at p99 with 100 concurrent goroutines
+- [ ] Benchmark: warm read latency < 1 ms at p99 with 100 concurrent Tokio tasks
 - [ ] Activate the `redis` service in `docker-compose.yml` (`just services-up phase3`)
   for local development; document in `docs/ops/local-dev.md`
 

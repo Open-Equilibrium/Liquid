@@ -222,6 +222,12 @@ fn load_workspace_file(path: &Path) -> Result<Vec<DiskBinding>> {
     Ok(parsed.bindings)
 }
 
+/// Atomic write + Unix mode 0600 clamp.
+///
+/// `permissions.toml` leaks the full role-binding table (principal
+/// UUID → role → resource) and workspace membership. Owner-only
+/// access prevents a local attacker from enumerating who has Admin
+/// or who has access to which workspace.
 fn atomic_write(target: &Path, bytes: &[u8]) -> Result<()> {
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).map_err(|e| io_err("create parent", &e))?;
@@ -233,7 +239,21 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<()> {
         f.write_all(bytes).map_err(|e| io_err("write tmp", &e))?;
         f.sync_all().map_err(|e| io_err("sync tmp", &e))?;
     }
-    fs::rename(&tmp, target).map_err(|e| io_err("rename", &e))
+    fs::rename(&tmp, target).map_err(|e| io_err("rename", &e))?;
+    restrict_perms(target)
+}
+
+#[cfg(unix)]
+fn restrict_perms(target: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(target, std::fs::Permissions::from_mode(0o600))
+        .map_err(|e| io_err("chmod 0600", &e))
+}
+
+#[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)] // signature must match the Unix arm
+fn restrict_perms(_target: &Path) -> Result<()> {
+    Ok(())
 }
 
 fn io_err(stage: &str, e: &std::io::Error) -> LiquidError {

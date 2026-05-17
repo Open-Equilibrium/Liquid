@@ -2,27 +2,37 @@ coverage:
   status:
     project:
       default:
+        # IMPLEMENTATION_PLAN.md §15 sets the workspace floor at 80%
+        # line coverage on every crate except `liquid-cli`. `threshold`
+        # lets a noisy single-commit dip glide as long as the project
+        # stays above the floor.
         target: 80%
         threshold: 5%
     patch:
       default:
-        target: 70%
-        threshold: 10%
+        # Phase-1 practice (commits 9c920bc, a26be22, …) drives every
+        # new patch to 100% before merge; the 90% target + 5% threshold
+        # gives codecov room to round generated lines without
+        # contradicting the "patch is fully covered" working policy.
+        target: 90%
+        threshold: 5%
 
-  # Track coverage per layer
-  flags:
-    rust:
-      paths:
-        - core/
-      carryforward: true
-    sdk:
-      paths:
-        - sdk/liquid_sdk/
-      carryforward: true
-    app:
-      paths:
-        - app/
-      carryforward: true
+# Per-layer flags. Codecov expects `flags` at the document root, not
+# nested under `coverage:` — the previous nesting silently disabled
+# the per-layer carryforward + path filtering on every upload.
+flags:
+  rust:
+    paths:
+      - core/
+    carryforward: true
+  sdk:
+    paths:
+      - sdk/liquid_sdk/
+    carryforward: true
+  app:
+    paths:
+      - app/
+    carryforward: true
 
 comment:
   layout: "reach,diff,flags,files"
@@ -36,6 +46,6 @@ ignore:
   # the full grammar with M7 (TASK-009); re-evaluate this exemption
   # then and cover the binary via `tests/cli/` bats.
   - "core/liquid-cli/**"
-  - "app/lib/bridge/**"   # generated FFI bindings — not meaningful to cover
+  - "app/lib/bridge/**"    # generated FFI bindings — not meaningful to cover
   - "**/*.g.dart"          # generated code
   - "**/*.freezed.dart"    # generated code
