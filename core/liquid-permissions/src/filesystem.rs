@@ -251,6 +251,7 @@ fn restrict_perms(target: &Path) -> Result<()> {
 }
 
 #[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)] // signature must match the Unix arm
 fn restrict_perms(_target: &Path) -> Result<()> {
     Ok(())
 }

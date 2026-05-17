@@ -18,6 +18,20 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — Windows CI (clippy `unnecessary_wraps` on `restrict_perms` no-op)
+
+- All four `restrict_perms` / `restrict_credential_perms` `#[cfg(not(unix))]`
+  arms (`liquid-auth/src/storage.rs`, `liquid-permissions/src/filesystem.rs`,
+  `liquid-sdk-bridge/src/registry.rs`, `liquid-cli/src/services.rs`)
+  unconditionally return `Ok(())`. Clippy's pedantic
+  `clippy::unnecessary_wraps` fires on Windows because the `Result` is
+  never used — but the signature must match the Unix arm that *does*
+  use `Result` for `map_err`. Added an `#[allow(clippy::unnecessary_wraps)]`
+  + cross-arm explanatory comment to each Windows variant so the
+  `cargo clippy --workspace -- -D warnings` CI step passes on
+  `windows-latest`. Verified locally via
+  `cargo clippy --target x86_64-pc-windows-gnu --workspace --all-targets --locked -- -D warnings`.
+
 ### Fixed — round-6 doc-only audit finding (Go terminology in Rust plan)
 
 - `IMPLEMENTATION_PLAN.md §7.2` line 1022: the Milestone 14

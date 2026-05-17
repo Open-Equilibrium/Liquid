@@ -119,6 +119,7 @@ fn restrict_perms(target: &Path) -> Result<()> {
 }
 
 #[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)] // signature must match the Unix arm
 fn restrict_perms(_target: &Path) -> Result<()> {
     // Windows ACL inheritance from the parent directory; tightening
     // the file ACL explicitly is out of scope for Phase 1.

@@ -139,6 +139,7 @@ fn restrict_credential_perms(target: &Path) -> Result<()> {
 }
 
 #[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)] // signature must match the Unix arm
 fn restrict_credential_perms(_target: &Path) -> Result<()> {
     // Windows: file ACL is inherited from the parent directory.
     // Tightening it requires `windows-acl` / `windows-sys` calls
