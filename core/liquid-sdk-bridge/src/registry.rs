@@ -228,6 +228,13 @@ struct WorkspacesFile {
     workspaces: Vec<WorkspaceRecord>,
 }
 
+/// Atomic write + Unix mode 0600 clamp.
+///
+/// `workspaces.toml` records `{id, name, created_by, created_unix}`
+/// for every workspace on the host. Owner-only access prevents a
+/// local attacker from enumerating the workspace ID space (which
+/// `delete_workspace` already takes pains to keep behind an
+/// anti-enumeration permission gate per §4.5).
 fn atomic_write(target: &Path, bytes: &[u8]) -> Result<()> {
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).map_err(|e| io_err("create parent", &e))?;
@@ -239,7 +246,20 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<()> {
         f.write_all(bytes).map_err(|e| io_err("write tmp", &e))?;
         f.sync_all().map_err(|e| io_err("sync tmp", &e))?;
     }
-    fs::rename(&tmp, target).map_err(|e| io_err("rename", &e))
+    fs::rename(&tmp, target).map_err(|e| io_err("rename", &e))?;
+    restrict_perms(target)
+}
+
+#[cfg(unix)]
+fn restrict_perms(target: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(target, std::fs::Permissions::from_mode(0o600))
+        .map_err(|e| io_err("chmod 0600", &e))
+}
+
+#[cfg(not(unix))]
+fn restrict_perms(_target: &Path) -> Result<()> {
+    Ok(())
 }
 
 fn io_err(stage: &str, e: &std::io::Error) -> LiquidError {

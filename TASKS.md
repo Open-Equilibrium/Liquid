@@ -90,10 +90,12 @@ emit maps `OperationKind::{Create,Update}` to the user-visible
       after dropping every `skip "pending M6.5"`.
 - [x] Every subcommand has a focused bats test covering the happy
       path and at least one auth-failure / negative path
-      (`tests/cli/10_cli_subcommands.bats`, 16 cases — the post-M6.5
+      (`tests/cli/10_cli_subcommands.bats`, 17 cases — the post-M6.5
       audit commit `a7b8d75` added 3 cases for short-form
       `--principal` filter, `--action Undo` discrimination, and the
-      bootstrap-token-missing edge case).
+      bootstrap-token-missing edge case; the Phase-1 security pass
+      added 1 case asserting every `$LIQUID_HOME` credential /
+      workspace-scoped file lands at mode 0600).
 - [x] No `unwrap()` / `expect()` outside `#[cfg(test)]`.
 - [x] `IMPLEMENTATION_PLAN.md §12` grammar matches every shipped
       subcommand; §5.6 ticks every checkbox; §9 `liquid-cli`

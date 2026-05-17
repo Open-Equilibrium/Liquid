@@ -24,9 +24,10 @@ pub trait PermissionIndex: Send + Sync {
     /// `InMemoryPermissionIndex` and `FilesystemPermissionIndex`
     /// scan a `HashSet<Binding>`. The materialised
     /// principal → action → resource index that brings this down to
-    /// `O(1)` lands in Phase 3 (see `IMPLEMENTATION_PLAN.md §4.3` —
-    /// "Phase-3: materialise index"). Callers should not assume `O(1)`
-    /// today; `list_workspaces` in particular compounds to
+    /// `O(1)` lands with Phase-3 Milestone 15 (see
+    /// `IMPLEMENTATION_PLAN.md §7.3` — "Distributed permission
+    /// index"). Callers should not assume `O(1)` today;
+    /// `list_workspaces` in particular compounds to
     /// `O(n_workspaces × n_bindings)` per call.
     async fn check(
         &self,

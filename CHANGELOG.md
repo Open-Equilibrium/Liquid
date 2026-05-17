@@ -18,6 +18,43 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Security — close round-2 audit gaps (H3 + W6) on credential modes
+
+- `core/liquid-auth/src/storage.rs`: `atomic_write` now `chmod 0600`
+  on Unix (was previously a copy of the same plain helper as in
+  `services.rs` — the round-1 fix only patched the `services.rs`
+  copy). The leak surface here was the worst on the host:
+  `users.toml` stores Argon2id PHC strings for every registered
+  user, so a world-readable file enabled offline dictionary attacks.
+  `agents.toml` similarly leaked agent registry + `authorized_by`
+  principal IDs.
+- `core/liquid-permissions/src/filesystem.rs`: third `atomic_write`
+  copy now also `chmod 0600`. `permissions.toml` leaked the full
+  role-binding table (who has Admin? who has access to which
+  workspace?). Defense in depth even though it is not a credential
+  file.
+- `core/liquid-sdk-bridge/src/registry.rs`: fourth `atomic_write`
+  copy now `chmod 0600`. `workspaces.toml` recorded `{id, name,
+  created_by, created_unix}` for every workspace on the host;
+  owner-only access aligns with the anti-enumeration posture
+  `delete_workspace` already takes (§4.5).
+- `tests/cli/10_cli_subcommands.bats`: the previous `secret + token`
+  mode test was expanded to cover all six sensitive files
+  (`secret`, `token`, `auth/users.toml`, `auth/agents.toml`,
+  `registry/workspaces.toml`, `perm/<workspace>/permissions.toml`).
+  The bats `if [...]` Windows skip guard was syntactically broken
+  (POSIX `[ ]` does not pattern-match a `MINGW*` glob — the `*` was
+  filename-expanded against `cwd` and never matched MSYS); rewrote
+  with `[[ ]]` so it actually fires on Git Bash / MSYS2 / Cygwin
+  / native PowerShell.
+- `core/liquid-permissions/src/index.rs`: doc cross-reference for
+  the Phase-3 materialised index corrected from §4.3 (which is
+  `ReadCache`) to §7.3 (Milestone 15 — Distributed permission
+  index).
+- `TASKS.md` TASK-008 acceptance criterion bumped 16 → 17 cases
+  (the round-1 commit added the credential-mode test in the same
+  change; the criterion was not incremented).
+
 ### Security — credential files now mode 0600; HMAC secret uses 256-bit entropy
 
 - `core/liquid-cli/src/services.rs`: `atomic_write` (used for the

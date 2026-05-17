@@ -50,23 +50,48 @@ teardown() {
   [[ "$(cat $LIQUID_HOME/token)" =~ ^u:[0-9a-f-]+\.[0-9]+\.[0-9a-f]+$ ]]
 }
 
-@test "credential files (secret + token) are mode 0600" {
-  # Regression for the post-M6.5 audit H1: the HMAC signing key + the
-  # bootstrap bearer token must not be world-readable. A world-readable
-  # secret lets any local user forge session tokens for any principal;
-  # a world-readable token hijacks the bootstrap session. atomic_write
-  # in services.rs must chmod 0600 after the rename.
-  if [ "$(uname -s)" = "MINGW"* ] || [ "$(uname -s)" = "Windows_NT" ]; then
+@test "all sensitive state-root files are mode 0600" {
+  # Regression for the post-M6.5 audit H1 + H3: every file under
+  # $LIQUID_HOME that holds a credential or workspace-scoped table
+  # must not be world-readable. World-readable means:
+  #   - secret  → any local user can forge HMAC session tokens
+  #   - token   → any local user can hijack the bootstrap session
+  #   - users.toml → offline dictionary attack on the Argon2id PHC
+  #   - agents.toml → agent enumeration + authorized_by leak
+  #   - permissions.toml → role-binding + workspace-membership leak
+  #   - registry/workspaces.toml → workspace-ID enumeration leak
+  # Every atomic_write in the four crates must chmod 0600 after rename.
+  # Windows ACLs do not have POSIX mode bits — uname -s on MSYS2 /
+  # Git Bash returns MINGW64_NT-10.0 (or MSYS_NT-…), on Cygwin
+  # CYGWIN_NT-…, on native PowerShell the var is unset. Use [[ ]] so
+  # the glob is a real pattern match, not a filename expansion.
+  if [[ "$(uname -s 2>/dev/null)" == MINGW* || \
+        "$(uname -s 2>/dev/null)" == MSYS* || \
+        "$(uname -s 2>/dev/null)" == CYGWIN* || \
+        "$(uname -s 2>/dev/null)" == "Windows_NT" ]]; then
     skip "POSIX mode bits N/A on Windows (ACL inheritance applies)"
   fi
-  liquid --format json workspace create demo >/dev/null
+  # Drive every atomic_write at least once: workspace create
+  # writes secret + token + users.toml + registry/workspaces.toml;
+  # provision-agent writes agents.toml; the workspace owner binding
+  # writes permissions.toml.
+  ws=$(liquid --format json workspace create demo | jq -r .data.workspace_id)
+  liquid --format json auth provision-agent worker \
+    --workspace "$ws" --role WorkspaceMember >/dev/null
+
   # GNU stat → '%a'; BSD stat → '-f %Lp'. Use both and take whichever works.
-  mode_secret=$(stat -c '%a' "$LIQUID_HOME/secret" 2>/dev/null \
-    || stat -f '%Lp' "$LIQUID_HOME/secret")
-  mode_token=$(stat -c '%a' "$LIQUID_HOME/token" 2>/dev/null \
-    || stat -f '%Lp' "$LIQUID_HOME/token")
-  [ "$mode_secret" = "600" ]
-  [ "$mode_token" = "600" ]
+  mode() {
+    stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"
+  }
+  [ "$(mode "$LIQUID_HOME/secret")" = "600" ]
+  [ "$(mode "$LIQUID_HOME/token")" = "600" ]
+  [ "$(mode "$LIQUID_HOME/auth/users.toml")" = "600" ]
+  [ "$(mode "$LIQUID_HOME/auth/agents.toml")" = "600" ]
+  [ "$(mode "$LIQUID_HOME/registry/workspaces.toml")" = "600" ]
+  # permissions.toml lives at perm/<workspace>/permissions.toml
+  perm_file=$(find "$LIQUID_HOME/perm" -name 'permissions.toml' | head -n1)
+  [ -n "$perm_file" ]
+  [ "$(mode "$perm_file")" = "600" ]
 }
 
 @test "workspace create persists registry across invocations" {
