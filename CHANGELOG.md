@@ -18,6 +18,15 @@ moved into a real version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — round-6 doc-only audit finding (Go terminology in Rust plan)
+
+- `IMPLEMENTATION_PLAN.md §7.2` line 1022: the Milestone 14
+  (Redis distributed cache) benchmark acceptance criterion read
+  "100 concurrent **goroutines**". Liquid is a Rust project
+  (`redis-rs` async client, Tokio runtime) — the term was a
+  pre-existing language artifact carried over from an earlier
+  draft. Replaced with "100 concurrent **Tokio tasks**".
+
 ### Fixed — round-5 doc-only audit finding (last O(1) drift)
 
 - `IMPLEMENTATION_PLAN.md §4.1` data-flow callout (line 168) and

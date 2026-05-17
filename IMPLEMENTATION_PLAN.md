@@ -1019,7 +1019,7 @@ Frame rate ≥ 60 fps on grid interactions measured with Flutter DevTools.
   `LIQUID_CACHE_URL`, `LIQUID_CACHE_POOL_SIZE`
 - [ ] Feature flag `distributed-cache` in `Cargo.toml` — off by default;
   single-binary deployments keep `InProcessCache` with no config change
-- [ ] Benchmark: warm read latency < 1 ms at p99 with 100 concurrent goroutines
+- [ ] Benchmark: warm read latency < 1 ms at p99 with 100 concurrent Tokio tasks
 - [ ] Activate the `redis` service in `docker-compose.yml` (`just services-up phase3`)
   for local development; document in `docs/ops/local-dev.md`
 
